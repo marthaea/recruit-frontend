@@ -1,0 +1,325 @@
+@import "tailwindcss" source(none);
+@import "tw-animate-css";
+
+@source "../src";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Design system definition.
+ *
+ * The @theme inline block maps CSS custom properties to Tailwind utility
+ * classes (e.g. --color-primary -> bg-primary, text-primary).
+ *
+ * The :root and .dark blocks define the actual color values using oklch.
+ * All colors MUST use oklch format.
+ *
+ * To add a new semantic color:
+ * 1. Add the variable to :root (light value) and .dark (dark value)
+ * 2. Register it in @theme inline as --color-<name>: var(--<name>)
+ */
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-ring-offset-background: var(--background);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-caa-navy: var(--caa-navy);
+  --color-caa-navy-2: var(--caa-navy-2);
+  --color-caa-gold: var(--caa-gold);
+  --color-caa-gold-2: var(--caa-gold-2);
+  --color-caa-surface: var(--caa-surface);
+  --color-caa-border: var(--caa-border);
+  --color-caa-body: var(--caa-body);
+  --color-caa-muted: var(--caa-muted);
+  --color-caa-light: var(--caa-light);
+  --color-caa-success: var(--caa-success);
+  --color-caa-danger: var(--caa-danger);
+  --color-caa-warning: var(--caa-warning);
+  --font-display: "Syne", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+}
+
+:root {
+  --radius: 0.625rem;
+  /* CAA Uganda brand */
+  --caa-navy: #0B2E5F;
+  --caa-navy-2: #1A4A8A;
+  /* Neutral accent (replaces previous gold) — kept under same token names
+     so existing utility classes continue to compose. White/light works on
+     the navy hero, and is patched per-component where it would conflict
+     with light surfaces. */
+  --caa-gold: #FFFFFF;
+  --caa-gold-2: #E8EEF7;
+  --caa-accent: #0E3B73;        /* deeper navy used for subtle accents */
+  --caa-surface: #F6F4EF;       /* warm off-white, less blue */
+  --caa-border: #E5E1D8;
+  --caa-body: #0F1C30;
+  --caa-muted: #5B5F66;
+  --caa-light: #8C8F96;
+  --caa-success: #1A7A4A;
+  --caa-danger: #C0392B;
+  --caa-warning: #B45309;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.129 0.042 264.695);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.129 0.042 264.695);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.129 0.042 264.695);
+  --primary: oklch(0.208 0.042 265.755);
+  --primary-foreground: oklch(0.984 0.003 247.858);
+  --secondary: oklch(0.968 0.007 247.896);
+  --secondary-foreground: oklch(0.208 0.042 265.755);
+  --muted: oklch(0.968 0.007 247.896);
+  --muted-foreground: oklch(0.554 0.046 257.417);
+  --accent: oklch(0.968 0.007 247.896);
+  --accent-foreground: oklch(0.208 0.042 265.755);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.984 0.003 247.858);
+  --border: oklch(0.929 0.013 255.508);
+  --input: oklch(0.929 0.013 255.508);
+  --ring: oklch(0.704 0.04 256.788);
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+  --sidebar: oklch(0.984 0.003 247.858);
+  --sidebar-foreground: oklch(0.129 0.042 264.695);
+  --sidebar-primary: oklch(0.208 0.042 265.755);
+  --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
+  --sidebar-accent: oklch(0.968 0.007 247.896);
+  --sidebar-accent-foreground: oklch(0.208 0.042 265.755);
+  --sidebar-border: oklch(0.929 0.013 255.508);
+  --sidebar-ring: oklch(0.704 0.04 256.788);
+}
+
+.dark {
+  --background: oklch(0.129 0.042 264.695);
+  --foreground: oklch(0.984 0.003 247.858);
+  --card: oklch(0.208 0.042 265.755);
+  --card-foreground: oklch(0.984 0.003 247.858);
+  --popover: oklch(0.208 0.042 265.755);
+  --popover-foreground: oklch(0.984 0.003 247.858);
+  --primary: oklch(0.929 0.013 255.508);
+  --primary-foreground: oklch(0.208 0.042 265.755);
+  --secondary: oklch(0.279 0.041 260.031);
+  --secondary-foreground: oklch(0.984 0.003 247.858);
+  --muted: oklch(0.279 0.041 260.031);
+  --muted-foreground: oklch(0.704 0.04 256.788);
+  --accent: oklch(0.279 0.041 260.031);
+  --accent-foreground: oklch(0.984 0.003 247.858);
+  --destructive: oklch(0.704 0.191 22.216);
+  --destructive-foreground: oklch(0.984 0.003 247.858);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.551 0.027 264.364);
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: oklch(0.208 0.042 265.755);
+  --sidebar-foreground: oklch(0.984 0.003 247.858);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
+  --sidebar-accent: oklch(0.279 0.041 260.031);
+  --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.551 0.027 264.364);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  body {
+    background-color: var(--caa-surface);
+    color: var(--caa-body);
+    font-family: var(--font-sans);
+    font-weight: 400;
+  }
+  .font-display {
+    font-family: var(--font-display);
+    letter-spacing: -0.01em;
+  }
+}
+
+@layer utilities {
+  .caa-hero-bg {
+    background: linear-gradient(135deg, #0B2E5F 0%, #15396F 100%);
+    position: relative;
+  }
+  /* Photo hero used on the homepage. The image lives in src/assets and is
+     imported by the route, then applied as a CSS background via a style
+     attribute. */
+  .caa-hero-photo {
+    position: relative;
+    background-size: cover;
+    background-position: center;
+  }
+  .caa-hero-photo::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background: linear-gradient(100deg,
+      rgba(11,46,95,0.92) 0%,
+      rgba(11,46,95,0.78) 42%,
+      rgba(11,46,95,0.35) 72%,
+      rgba(11,46,95,0.10) 100%);
+    pointer-events: none;
+  }
+  .caa-card {
+    background: #fff;
+    border: 1px solid var(--caa-border);
+    border-radius: 12px;
+    transition: box-shadow 150ms ease, border-color 150ms ease, transform 150ms ease;
+  }
+  .caa-card-hover:hover {
+    border-color: var(--caa-navy);
+    box-shadow: 0 8px 24px -12px rgba(11, 46, 95, 0.18);
+  }
+  @keyframes caa-check-bounce {
+    0%   { transform: scale(0); opacity: 0; }
+    60%  { transform: scale(1.15); opacity: 1; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+  .caa-check-anim { animation: caa-check-bounce 520ms cubic-bezier(.2,.8,.3,1.2) forwards; }
+  @keyframes caa-toast-in {
+    from { transform: translateX(110%); opacity: 0; }
+    to   { transform: translateX(0);    opacity: 1; }
+  }
+  .caa-toast-in { animation: caa-toast-in 240ms ease-out forwards; }
+}
+
+@layer utilities {
+  @keyframes caa-fade-up {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes caa-fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+  @keyframes caa-scale-in {
+    from { opacity: 0; transform: scale(.96); }
+    to   { opacity: 1; transform: scale(1); }
+  }
+  .caa-fade-up { animation: caa-fade-up .6s cubic-bezier(.2,.7,.2,1) both; }
+  .caa-fade-in { animation: caa-fade-in .5s ease-out both; }
+  .caa-scale-in { animation: caa-scale-in .45s cubic-bezier(.2,.7,.2,1) both; }
+  .caa-delay-1 { animation-delay: .08s; }
+  .caa-delay-2 { animation-delay: .16s; }
+  .caa-delay-3 { animation-delay: .24s; }
+  .caa-delay-4 { animation-delay: .32s; }
+  .caa-lift { transition: transform .25s ease, box-shadow .25s ease; }
+  .caa-lift:hover { transform: translateY(-3px); box-shadow: 0 14px 32px -18px rgba(11,46,95,.28); }
+}
+
+@layer utilities {
+  @keyframes caa-ken-burns {
+    0%   { transform: scale(1) translate(0,0); }
+    100% { transform: scale(1.12) translate(-1.5%, -1%); }
+  }
+  .caa-ken-burns {
+    position: absolute; inset: 0; z-index: 0;
+    background-size: cover; background-position: center;
+    animation: caa-ken-burns 18s ease-out both;
+    will-change: transform;
+  }
+  @keyframes caa-slide-fade {
+    0%   { opacity: 0; }
+    100% { opacity: 1; }
+  }
+  .caa-hero-slide {
+    position: absolute; inset: 0; z-index: 0;
+    background-size: cover; background-position: center;
+    opacity: 0;
+    transition: opacity 900ms ease-in-out;
+    will-change: opacity, transform;
+  }
+  .caa-hero-slide.is-active {
+    opacity: 1;
+    animation: caa-ken-burns 6s ease-out both;
+  }
+  @keyframes caa-shimmer {
+    0%   { background-position: -400px 0; }
+    100% { background-position: 400px 0; }
+  }
+  .caa-skeleton {
+    background: linear-gradient(90deg, #ECE8DF 0%, #F6F4EF 50%, #ECE8DF 100%);
+    background-size: 800px 100%;
+    animation: caa-shimmer 1.4s linear infinite;
+    border-radius: 8px;
+  }
+  .caa-diag-divider {
+    display: block; width: 100%; height: 48px;
+  }
+  /* "See Open Roles" looping attention animation */
+  @keyframes caa-pulse-ring {
+    0%   { box-shadow: 0 0 0 0 rgba(255,255,255,0.55), 0 0 0 0 rgba(255,255,255,0.25); }
+    60%  { box-shadow: 0 0 0 10px rgba(255,255,255,0), 0 0 0 20px rgba(255,255,255,0); }
+    100% { box-shadow: 0 0 0 0 rgba(255,255,255,0), 0 0 0 0 rgba(255,255,255,0); }
+  }
+  @keyframes caa-btn-breathe {
+    0%, 100% { transform: scale(1);    background-color: rgba(255,255,255,0.08); }
+    50%       { transform: scale(1.04); background-color: rgba(255,255,255,0.18); }
+  }
+  .caa-hero-cta {
+    animation: caa-btn-breathe 2.4s ease-in-out infinite,
+               caa-pulse-ring   2.4s ease-in-out infinite;
+  }
+  .caa-hero-cta:hover {
+    animation: none;
+    background-color: rgba(255,255,255,0.18);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .caa-ken-burns, .caa-skeleton, .caa-hero-cta { animation: none !important; }
+  }
+}
+
+@layer base {
+  html { scroll-behavior: smooth; }
+  a, button { transition: color .2s ease, background-color .2s ease, border-color .2s ease, transform .2s ease, box-shadow .2s ease, opacity .2s ease; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .001ms !important; transition-duration: .001ms !important; scroll-behavior: auto !important; }
+  }
+}
