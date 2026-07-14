@@ -49,7 +49,7 @@ const STAFF_DATA: StaffRecord[] = Object.entries(CAA_STAFF).map(([empNo, { first
   empNo, firstName, lastName,
   dept: DEPT_LIST[i % DEPT_LIST.length],
   position: POSITIONS[i % POSITIONS.length],
-  email: `${firstName.toLowerCase()}.${lastName.toLowerCase()}@caa.co.ug`,
+  email: `${firstName.toLowerCase()}${lastName.toLowerCase()}@caa.go.ug`,
   joined: `${2014 + (i % 9)}-${String((i % 12) + 1).padStart(2, "0")}-${String((i % 28) + 1).padStart(2, "0")}`,
   status: "Active",
 }));
@@ -868,7 +868,7 @@ function JobsTab({ jobs, isExpired, addJob, updateJob, deleteJob, onViewApps }: 
 
 function buildEmail(status: string, candidateName: string, jobTitle: string): { subject: string; body: string } {
   const ref = `UCAA/HR/${new Date().getFullYear()}`;
-  const sign = `\n\nYours sincerely,\nHuman Resources Department\nUganda Civil Aviation Authority\nTel: +256 312 352 000  |  hr@caa.co.ug  |  www.caa.co.ug\n\nThis email was sent from the UCAA e-Recruitment Portal. UCAA does not charge fees at any stage of recruitment.`;
+  const sign = `\n\nYours sincerely,\nHuman Resources Department\nUganda Civil Aviation Authority\nTel: +256 312 352 000  |  hr@caa.go.ug  |  www.caa.go.ug\n\nThis email was sent from the UCAA e-Recruitment Portal. UCAA does not charge fees at any stage of recruitment.`;
 
   switch (status) {
     case "Shortlisted":

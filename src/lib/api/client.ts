@@ -4,12 +4,15 @@
 const BASE = (import.meta.env.VITE_API_URL as string) ?? "http://localhost:5000/api";
 
 // Access token stored in memory, persisted to localStorage for page refresh survival.
-let _token: string | null = localStorage.getItem("caa_token");
+let _token: string | null =
+  typeof localStorage !== "undefined" ? localStorage.getItem("caa_token") : null;
 
 export function setToken(t: string | null) {
   _token = t;
-  if (t) localStorage.setItem("caa_token", t);
-  else localStorage.removeItem("caa_token");
+  if (typeof localStorage !== "undefined") {
+    if (t) localStorage.setItem("caa_token", t);
+    else localStorage.removeItem("caa_token");
+  }
 }
 
 export function getToken() { return _token; }
@@ -54,7 +57,7 @@ async function request<T>(
       return retry.json();
     }
     setToken(null);
-    window.location.href = "/login";
+    if (typeof window !== "undefined") window.location.href = "/login";
     throw new Error("Session expired");
   }
 

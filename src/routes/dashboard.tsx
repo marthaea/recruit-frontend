@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { Check, Circle, Bell, FileText, Eye, Users, Award, Mail, Pencil, X, UserCog, Download } from "lucide-react";
+import { Check, Circle, Bell, FileText, Eye, Users, Award, Mail, Pencil, X, UserCog, Download, Camera } from "lucide-react";
 import { useApp, canWithdraw, type Application } from "@/context/AppContext";
 import { downloadApplicationSummary } from "@/lib/admin-pdf";
+import { PhotoCropModal } from "@/components/PhotoCropModal";
+import { cv as cvApi } from "@/lib/api/client";
 
 export const Route = createFileRoute("/dashboard")({
   head: () => ({
@@ -76,11 +78,24 @@ function AppPipeline({ status }: { status: Application["status"] }) {
   );
 }
 
+// ── Live clock ────────────────────────────────────────────────────────────────
+function useLiveTime() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  return now;
+}
+
 function DashboardPage() {
-  const { auth, applications, jobs, withdrawApplication, updateProfile, pushToast, notifications, markNotificationRead } = useApp();
+  const { auth, applications, jobs, withdrawApplication, updateProfile, updatePhotoUrl, pushToast, notifications, markNotificationRead } = useApp();
   const navigate = useNavigate();
+  const now = useLiveTime();
+
   const [confirmId, setConfirmId] = useState<number | null>(null);
   const [editProfile, setEditProfile] = useState(false);
+  const [photoModalOpen, setPhotoModalOpen] = useState(false);
   const [pf, setPf] = useState({ firstName: auth.firstName, lastName: auth.lastName, email: auth.email });
 
   useEffect(() => {
@@ -90,6 +105,25 @@ function DashboardPage() {
   useEffect(() => {
     if (!auth.isLoggedIn) navigate({ to: "/login" });
   }, [auth.isLoggedIn, navigate]);
+
+  // Greeting + time
+  const hour = now.getHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+  const timeStr = now.toLocaleTimeString("en-UG", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  const dateStr = now.toLocaleDateString("en-UG", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+
+  const handlePhotoSave = useCallback(async (dataUrl: string, blob: Blob) => {
+    updatePhotoUrl(dataUrl); // optimistic — show immediately
+    setPhotoModalOpen(false);
+    try {
+      const file = new File([blob], "profile.jpg", { type: "image/jpeg" });
+      const res = await cvApi.upload(file, "photo");
+      if (res.success && res.data.url) updatePhotoUrl(res.data.url);
+    } catch {
+      // keep the local data-URL — works fine without a server
+    }
+    pushToast({ type: "success", title: "Profile photo updated" });
+  }, [updatePhotoUrl, pushToast]);
 
   if (!auth.isLoggedIn) return null;
 
@@ -134,12 +168,46 @@ function DashboardPage() {
     <>
       <div className="caa-hero-bg py-10 px-4 sm:px-6">
         <div className="relative mx-auto max-w-6xl flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <p className="text-white/65 text-sm">Good morning 👋</p>
-            <h1 className="font-bold text-white text-3xl md:text-4xl mt-1">
-              {auth.firstName} {auth.lastName}
-            </h1>
+          {/* Left: avatar + greeting */}
+          <div className="flex items-center gap-4">
+            {/* Profile photo — click to change */}
+            <button
+              onClick={() => setPhotoModalOpen(true)}
+              className="relative group shrink-0 focus:outline-none"
+              aria-label="Change profile photo"
+            >
+              {auth.photoUrl ? (
+                <img
+                  src={auth.photoUrl}
+                  alt="Profile"
+                  className="h-16 w-16 rounded-full object-cover border-2 border-white/40 group-hover:border-white transition-colors shadow-md"
+                />
+              ) : (
+                <div className="h-16 w-16 rounded-full bg-white/20 border-2 border-white/30 group-hover:bg-white/30 transition-colors flex items-center justify-center shadow-md">
+                  <span className="text-white font-bold text-xl select-none">
+                    {auth.firstName?.[0]}{auth.lastName?.[0]}
+                  </span>
+                </div>
+              )}
+              {/* Camera badge on hover */}
+              <span className="absolute -bottom-0.5 -right-0.5 h-6 w-6 rounded-full bg-caa-gold border-2 border-[#0b2e5f] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                <Camera className="h-3 w-3 text-caa-navy" />
+              </span>
+            </button>
+
+            {/* Greeting text + live clock */}
+            <div>
+              <p className="text-white/65 text-sm">
+                {greeting} 👋 &nbsp;·&nbsp; {dateStr}
+              </p>
+              <h1 className="font-bold text-white text-3xl md:text-4xl mt-0.5">
+                {auth.firstName} {auth.lastName}
+              </h1>
+              <p className="text-white/45 text-sm mt-1 font-mono tracking-wide">{timeStr}</p>
+            </div>
           </div>
+
+          {/* Right: action buttons */}
           <div className="flex gap-3">
             <Link to="/vacancies" className="px-4 py-2.5 text-sm border border-white/30 text-white rounded-md hover:bg-white/10 transition-colors">
               Browse Vacancies
@@ -371,6 +439,14 @@ function DashboardPage() {
           </div>
         </div>
       )}
+
+      {/* Photo crop modal */}
+      <PhotoCropModal
+        open={photoModalOpen}
+        currentPhoto={auth.photoUrl}
+        onClose={() => setPhotoModalOpen(false)}
+        onSave={handlePhotoSave}
+      />
 
       {/* Edit profile modal */}
       {editProfile && (

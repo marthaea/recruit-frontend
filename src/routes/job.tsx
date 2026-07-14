@@ -746,7 +746,7 @@ function JobDetailPage() {
                 Headquarters: Entebbe International Airport &nbsp;|&nbsp; P.O. Box 5536, Kampala
               </p>
               <p className="text-white/70 text-sm">
-                Tel: +256 312 352 000 &nbsp;|&nbsp; Email: aviation@caa.co.ug &nbsp;|&nbsp; www.caa.co.ug
+                Tel: +256 312 352 000 &nbsp;|&nbsp; Email: aviation@caa.go.ug &nbsp;|&nbsp; www.caa.go.ug
               </p>
             </div>
           </div>
@@ -894,7 +894,7 @@ function JobDetailPage() {
                       </li>
                       <li className="leading-relaxed">
                         Submit the complete application to the recruitment email:{" "}
-                        <strong>recruitment@caa.co.ug</strong>
+                        <strong>recruitment@caa.go.ug</strong>
                       </li>
                       <li className="leading-relaxed">
                         Please note that falsification of information is an offence in UCAA. You are advised to only apply for jobs where you meet the minimum requirements as indicated in the job description.

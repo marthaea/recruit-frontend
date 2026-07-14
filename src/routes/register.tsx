@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ShieldCheck, CheckCircle2, AlertCircle, Mail, Lock, Eye, EyeOff, Building2, User } from "lucide-react";
-import { useApp, isCAAEmail, CAA_STAFF, type AccountType } from "@/context/AppContext";
+import { useApp, isCAAEmail, type AccountType } from "@/context/AppContext";
 
 export const Route = createFileRoute("/register")({
   head: () => ({
@@ -16,10 +16,11 @@ export const Route = createFileRoute("/register")({
 type PwChecks = { length: boolean; upper: boolean; number: boolean; symbol: boolean; match: boolean };
 
 function RegisterPage() {
-  const { signIn, pushToast } = useApp();
+  const { apiRegister, isLoading, pushToast } = useApp();
   const navigate = useNavigate();
   const [f, setF] = useState({
     accountType: "external" as AccountType,
+    firstName: "", lastName: "",
     email: "", password: "", confirm: "",
     employeeNumber: "",
     agree: false,
@@ -38,22 +39,32 @@ function RegisterPage() {
   const isInternal = f.accountType === "internal";
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email);
   const caaEmailOk = !isInternal || isCAAEmail(f.email);
-  const staffOk = !isInternal || (f.employeeNumber.trim() in CAA_STAFF);
   const pwAllOk = pw.length && pw.upper && pw.number && pw.symbol && pw.match;
-  const canSubmit = emailValid && caaEmailOk && staffOk && pwAllOk && f.agree;
+  const namesOk = f.firstName.trim().length > 0 && f.lastName.trim().length > 0;
+  const canSubmit = namesOk && emailValid && caaEmailOk && pwAllOk && f.agree && !isLoading;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (!namesOk) return pushToast({ type: "warning", title: "Enter your full name" });
     if (!emailValid) return pushToast({ type: "warning", title: "Enter a valid email" });
-    if (isInternal && !caaEmailOk) return pushToast({ type: "warning", title: "Internal staff must use a @caa.co.ug email" });
-    if (isInternal && !staffOk) return pushToast({ type: "warning", title: "Employee number not found", message: "Try CAA-1001, CAA-1002, or CAA-1003 for the demo." });
+    if (isInternal && !caaEmailOk) return pushToast({ type: "warning", title: "Internal staff must use a @caa.go.ug email" });
     if (!pwAllOk) return pushToast({ type: "warning", title: "Password does not meet requirements" });
     if (!f.agree) return pushToast({ type: "warning", title: "Please accept the Terms" });
-
-    const seed = isInternal ? CAA_STAFF[f.employeeNumber.trim()] : { firstName: "Candidate", lastName: "" };
-    signIn(seed.firstName, seed.lastName, f.email, { accountType: f.accountType, employeeNumber: f.employeeNumber.trim() });
-    pushToast({ type: "success", title: "Account created", message: "You can now browse vacancies and apply." });
-    navigate({ to: "/vacancies" });
+    try {
+      await apiRegister({
+        firstName: f.firstName.trim(),
+        lastName: f.lastName.trim(),
+        email: f.email.trim(),
+        password: f.password,
+        accountType: f.accountType,
+        employeeNumber: isInternal ? f.employeeNumber.trim() : undefined,
+      });
+      pushToast({ type: "success", title: "Account created", message: "You can now browse vacancies and apply." });
+      navigate({ to: "/vacancies" });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Registration failed";
+      pushToast({ type: "warning", title: "Registration failed", message });
+    }
   };
 
   const input = "w-full pl-10 pr-3 py-2 text-sm border border-caa-border rounded-md bg-white focus:outline-none focus:border-caa-navy focus:ring-1 focus:ring-caa-navy/20";
@@ -92,14 +103,25 @@ function RegisterPage() {
             </div>
           </div>
 
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={label}>First name</label>
+              <input value={f.firstName} onChange={(e) => set("firstName", e.target.value)} className={input} placeholder="Amara" />
+            </div>
+            <div>
+              <label className={label}>Last name</label>
+              <input value={f.lastName} onChange={(e) => set("lastName", e.target.value)} className={input} placeholder="Nakato" />
+            </div>
+          </div>
+
           <div>
             <label className={label}>Email address</label>
             <div className="relative">
               <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-caa-light" />
-              <input type="email" value={f.email} onChange={(e) => set("email", e.target.value)} className={input} placeholder={isInternal ? "you@caa.co.ug" : "you@example.com"} />
+              <input type="email" value={f.email} onChange={(e) => set("email", e.target.value)} className={input} placeholder={isInternal ? "you@caa.go.ug" : "you@example.com"} />
             </div>
             {isInternal && f.email && !caaEmailOk && (
-              <p className="text-[11px] text-caa-danger mt-1 flex items-center gap-1"><AlertCircle className="h-3 w-3" /> Internal staff must use a @caa.co.ug email.</p>
+              <p className="text-[11px] text-caa-danger mt-1 flex items-center gap-1"><AlertCircle className="h-3 w-3" /> Internal staff must use a @caa.go.ug email.</p>
             )}
           </div>
 
@@ -110,7 +132,7 @@ function RegisterPage() {
                 <ShieldCheck className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-caa-light" />
                 <input value={f.employeeNumber} onChange={(e) => set("employeeNumber", e.target.value.toUpperCase())} className={input} placeholder="e.g. CAA-1001" />
               </div>
-              <p className="text-[11px] text-caa-muted mt-1">Demo numbers: CAA-1001, CAA-1002, CAA-1003.</p>
+              <p className="text-[11px] text-caa-muted mt-1">Enter your CAA employee number as issued by HR.</p>
             </div>
           )}
 
@@ -153,7 +175,7 @@ function RegisterPage() {
           </label>
 
           <button type="submit" disabled={!canSubmit} className="w-full py-2.5 bg-caa-navy text-white font-semibold rounded-md hover:bg-caa-navy-2 transition-colors disabled:opacity-50">
-            Create account
+            {isLoading ? "Creating account…" : "Create account"}
           </button>
           <p className="text-[11px] text-caa-muted text-center">You'll build your CV the first time you apply for a role.</p>
         </form>

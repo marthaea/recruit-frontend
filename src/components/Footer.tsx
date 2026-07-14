@@ -16,12 +16,12 @@ const IMPORTANT_LINKS = [
 ];
 
 const BOTTOM_LINKS = [
-  { label: "Disclaimer",       href: "https://www.caa.co.ug/disclaimer/" },
-  { label: "Website Policies", href: "https://www.caa.co.ug/privacy-policy/" },
-  { label: "AIS",              href: "https://www.caa.co.ug/ais/" },
-  { label: "ASL",              href: "https://www.caa.co.ug/aviation-safety-library/" },
-  { label: "ASCRS",            href: "https://www.caa.co.ug/ascrs/" },
-  { label: "Webmail",          href: "https://mail.caa.co.ug" },
+  { label: "Disclaimer",       href: "https://www.caa.go.ug/disclaimer/" },
+  { label: "Website Policies", href: "https://www.caa.go.ug/privacy-policy/" },
+  { label: "AIS",              href: "https://www.caa.go.ug/ais/" },
+  { label: "ASL",              href: "https://www.caa.go.ug/aviation-safety-library/" },
+  { label: "ASCRS",            href: "https://www.caa.go.ug/ascrs/" },
+  { label: "Webmail",          href: "https://mail.caa.go.ug" },
 ];
 
 const PHOTOS = [
@@ -92,7 +92,7 @@ export function Footer() {
                 </li>
                 <li className="flex items-start gap-3">
                   <Mail className="h-4 w-4 mt-0.5 text-white/50 shrink-0" />
-                  aviation@caa.co.ug
+                  aviation@caa.go.ug
                 </li>
                 <li className="flex items-start gap-3">
                   <Clock className="h-4 w-4 mt-0.5 text-white/50 shrink-0" />

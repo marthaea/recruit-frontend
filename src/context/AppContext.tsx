@@ -1,4 +1,9 @@
 import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from "react";
+import {
+  auth as authApi, jobs as jobsApi, applications as appsApi,
+  notifications as notifApi, settings as settingsApi,
+  cv as cvApi, setToken,
+} from "@/lib/api/client";
 
 // ─── Base types ───────────────────────────────────────────────────────────────
 
@@ -170,6 +175,7 @@ type Auth = {
   isLoggedIn: boolean; firstName: string; lastName: string; email: string;
   accountType: AccountType; employeeNumber?: string;
   effectiveType?: AccountType; adminRole?: AdminRole;
+  photoUrl?: string;
 };
 
 // ─── CV ───────────────────────────────────────────────────────────────────────
@@ -211,12 +217,12 @@ export const EMPTY_CV: CvProfile = {
 };
 
 const DEMO_CV_STORE: Record<string, CvProfile> = {
-  "j.bukenya@gmail.com": {
+  "jbukenya@gmail.com": {
     personal: {
       firstName: "John", lastName: "Bukenya",
       dob: "1990-03-15", gender: "Male", nationality: "Ugandan",
       nin: "CM79000315BUKJN", phone: "+256 701 234 567",
-      email: "j.bukenya@gmail.com", address: "Plot 45, Kisaasi, Kampala",
+      email: "jbukenya@gmail.com", address: "Plot 45, Kisaasi, Kampala",
     },
     highestLevel: "Degree",
     qualifications: [
@@ -228,17 +234,17 @@ const DEMO_CV_STORE: Record<string, CvProfile> = {
     ],
     skills: ["Air Traffic Control", "Radar Systems", "Radio Communication", "ICAO Procedures", "Emergency Handling", "Team Leadership"],
     referees: [
-      { name: "Col. Peter Wamala", title: "Director, Air Traffic Management", organisation: "UCAA", phone: "+256 414 352 000", email: "p.wamala@caa.co.ug" },
+      { name: "Col. Peter Wamala", title: "Director, Air Traffic Management", organisation: "UCAA", phone: "+256 414 352 000", email: "pwamala@caa.go.ug" },
       { name: "Dr. Rose Nalwoga", title: "Head of Department", organisation: "Makerere University", phone: "+256 772 900 100", email: "r.nalwoga@mak.ac.ug" },
     ],
     nextOfKin: { name: "Margaret Bukenya", relationship: "Spouse", phone: "+256 772 111 222" },
   },
-  "m.auma@gmail.com": {
+  "mauma@gmail.com": {
     personal: {
       firstName: "Mary", lastName: "Auma",
       dob: "1992-07-22", gender: "Female", nationality: "Ugandan",
       nin: "CF92000722AUMAM", phone: "+256 772 345 678",
-      email: "m.auma@gmail.com", address: "Plot 12B, Ntinda, Kampala",
+      email: "mauma@gmail.com", address: "Plot 12B, Ntinda, Kampala",
     },
     highestLevel: "Degree",
     qualifications: [
@@ -261,9 +267,16 @@ const DEMO_CV_STORE: Record<string, CvProfile> = {
 
 type Ctx = {
   auth: Auth;
+  isLoading: boolean;
+  /** Async sign-in that calls the real API. Use this in login.tsx. */
+  apiSignIn: (email: string, password: string) => Promise<void>;
+  /** Async register that calls the real API. Use this in register.tsx. */
+  apiRegister: (data: { email: string; password: string; firstName: string; lastName: string; accountType: AccountType; employeeNumber?: string }) => Promise<void>;
+  /** Sync shim kept for demo/admin shortcuts — prefer apiSignIn for real auth. */
   signIn: (firstName: string, lastName?: string, email?: string, opts?: { accountType?: AccountType; employeeNumber?: string; adminRole?: AdminRole }) => void;
   signOut: () => void;
   updateProfile: (patch: Partial<Pick<Auth, "firstName" | "lastName" | "email">>) => void;
+  updatePhotoUrl: (url: string) => void;
   toasts: Toast[];
   pushToast: (t: Omit<Toast, "id">) => void;
   dismissToast: (id: number) => void;
@@ -330,16 +343,16 @@ export const CAA_STAFF: Record<string, { firstName: string; lastName: string }> 
 };
 
 export const HR_USERS: Record<string, { firstName: string; lastName: string; password: string; role: AdminRole }> = {
-  "admin@caa.co.ug":       { firstName: "Alex",  lastName: "Mukasa",   password: "Admin@2026",   role: "super" },
-  "hr.director@caa.co.ug": { firstName: "Jane",  lastName: "Mirembe",  password: "HrDir@2026",   role: "hr" },
-  "recruit@caa.co.ug":     { firstName: "David", lastName: "Ssempala", password: "Recruit@2026", role: "recruiter" },
+  "admin@caa.go.ug":      { firstName: "Alex",  lastName: "Mukasa",   password: "Admin@2026",   role: "super" },
+  "hrdirector@caa.go.ug": { firstName: "Jane",  lastName: "Mirembe",  password: "HrDir@2026",   role: "hr" },
+  "recruit@caa.go.ug":    { firstName: "David", lastName: "Ssempala", password: "Recruit@2026", role: "recruiter" },
 };
 
-export function isCAAEmail(email: string) { return /@caa\.co\.ug$/i.test(email.trim()); }
-export const ADMIN_DEMO = { email: "admin@caa.co.ug", password: "Admin@2026" };
+export function isCAAEmail(email: string) { return /@caa\.go\.ug$/i.test(email.trim()); }
+export const ADMIN_DEMO = { email: "admin@caa.go.ug", password: "Admin@2026" };
 /** Sign in with this email (any password) on /login to see a candidate account with a realistic,
  *  small set of applications instead of a brand-new empty one. */
-export const CANDIDATE_DEMO = { email: "j.bukenya@gmail.com", firstName: "John", lastName: "Bukenya" };
+export const CANDIDATE_DEMO = { email: "jbukenya@gmail.com", firstName: "John", lastName: "Bukenya" };
 
 const JOBS: Job[] = [
   { id: 1, abbr: "ATC", title: "Senior Air Traffic Controller", dept: "Air Traffic Mgmt", deptKey: "atm", location: "Entebbe Airport", salary: "UGX 4.2M–5.8M", salaryBand: "UG4", type: "Full-time", closes: "Jun 15, 2026", closesAt: "2026-06-15", visibility: "external", minAge: 25, requiredExperience: 5, requiredQualification: "Degree", featured: true, description: "Direct en-route and approach traffic at Entebbe ACC." },
@@ -421,7 +434,7 @@ function generateSeedApplications(): Application[] {
       s = lcg(s); const dom = DOM[s % DOM.length];
 
       // Unique-ify email
-      const base = `${fn.toLowerCase().replace(/[^a-z]/g,"")}.${ln.toLowerCase().replace(/[^a-z]/g,"")}`;
+      const base = `${fn.toLowerCase().replace(/[^a-z]/g,"")}${ln.toLowerCase().replace(/[^a-z]/g,"")}`;
       let em = `${base}@${dom}`;
       if (usedEmails.has(em)) em = `${base}${k}@${dom}`;
       usedEmails.add(em);
@@ -452,21 +465,21 @@ const APPLICATIONS: Application[] = [
   // three demo applications (IDs 20, 21) are scattered into the bulk list below instead of
   // sitting right here, so "John Bukenya" doesn't appear three times in a row at the top of
   // the admin's All Applications view.
-  { id: 1, jobId: 1, abbr: "ATC", title: "Senior Air Traffic Controller", dept: "Air Traffic Mgmt", date: "Jun 3, 2026", status: "Shortlisted", completion: 100, candidateName: "John Bukenya", candidateEmail: "j.bukenya@gmail.com" },
-  { id: 2, jobId: 4, abbr: "FIN", title: "Finance Officer (Revenue Assurance)", dept: "Finance & Admin", date: "May 28, 2026", status: "Under Review", completion: 85, candidateName: "Mary Auma", candidateEmail: "m.auma@gmail.com" },
-  { id: 3, jobId: 3, abbr: "SYS", title: "Systems Administrator", dept: "ICT & Systems", date: "May 15, 2026", status: "Pending", completion: 60, candidateName: "Peter Nkutu", candidateEmail: "p.nkutu@gmail.com" },
-  { id: 4, jobId: 6, abbr: "ATT", title: "ATC Trainee (Graduate Entry)", dept: "Air Traffic Mgmt", date: "Jun 1, 2026", status: "Shortlisted", completion: 95, candidateName: "Kevin Ssali", candidateEmail: "k.ssali@student.mak.ac.ug", cgpa: 4.7, university: "Makerere University" },
-  { id: 5, jobId: 6, abbr: "ATT", title: "ATC Trainee (Graduate Entry)", dept: "Air Traffic Mgmt", date: "Jun 2, 2026", status: "Under Review", completion: 90, candidateName: "Brenda Akello", candidateEmail: "b.akello@student.mak.ac.ug", cgpa: 4.3, university: "Makerere University" },
-  { id: 6, jobId: 6, abbr: "ATT", title: "ATC Trainee (Graduate Entry)", dept: "Air Traffic Mgmt", date: "Jun 3, 2026", status: "Pending", completion: 80, candidateName: "Ivan Mucunguzi", candidateEmail: "i.mucunguzi@student.ucu.ac.ug", cgpa: 3.9, university: "Uganda Christian University" },
-  { id: 7, jobId: 6, abbr: "ATT", title: "ATC Trainee (Graduate Entry)", dept: "Air Traffic Mgmt", date: "Jun 5, 2026", status: "Pending", completion: 70, candidateName: "Stella Nabirye", candidateEmail: "s.nabirye@student.must.ac.ug", cgpa: 3.6, university: "Mbarara University" },
-  { id: 8, jobId: 6, abbr: "ATT", title: "ATC Trainee (Graduate Entry)", dept: "Air Traffic Mgmt", date: "Jun 7, 2026", status: "Declined", completion: 55, candidateName: "Ronald Oulanyah", candidateEmail: "r.oulanyah@student.gulu.ac.ug", cgpa: 2.8, university: "Gulu University" },
+  { id: 1, jobId: 1, abbr: "ATC", title: "Senior Air Traffic Controller", dept: "Air Traffic Mgmt", date: "Jun 3, 2026", status: "Shortlisted", completion: 100, candidateName: "John Bukenya", candidateEmail: "jbukenya@gmail.com" },
+  { id: 2, jobId: 4, abbr: "FIN", title: "Finance Officer (Revenue Assurance)", dept: "Finance & Admin", date: "May 28, 2026", status: "Under Review", completion: 85, candidateName: "Mary Auma", candidateEmail: "mauma@gmail.com" },
+  { id: 3, jobId: 3, abbr: "SYS", title: "Systems Administrator", dept: "ICT & Systems", date: "May 15, 2026", status: "Pending", completion: 60, candidateName: "Peter Nkutu", candidateEmail: "pnkutu@gmail.com" },
+  { id: 4, jobId: 6, abbr: "ATT", title: "ATC Trainee (Graduate Entry)", dept: "Air Traffic Mgmt", date: "Jun 1, 2026", status: "Shortlisted", completion: 95, candidateName: "Kevin Ssali", candidateEmail: "kssali@student.mak.ac.ug", cgpa: 4.7, university: "Makerere University" },
+  { id: 5, jobId: 6, abbr: "ATT", title: "ATC Trainee (Graduate Entry)", dept: "Air Traffic Mgmt", date: "Jun 2, 2026", status: "Under Review", completion: 90, candidateName: "Brenda Akello", candidateEmail: "bakello@student.mak.ac.ug", cgpa: 4.3, university: "Makerere University" },
+  { id: 6, jobId: 6, abbr: "ATT", title: "ATC Trainee (Graduate Entry)", dept: "Air Traffic Mgmt", date: "Jun 3, 2026", status: "Pending", completion: 80, candidateName: "Ivan Mucunguzi", candidateEmail: "imucunguzi@student.ucu.ac.ug", cgpa: 3.9, university: "Uganda Christian University" },
+  { id: 7, jobId: 6, abbr: "ATT", title: "ATC Trainee (Graduate Entry)", dept: "Air Traffic Mgmt", date: "Jun 5, 2026", status: "Pending", completion: 70, candidateName: "Stella Nabirye", candidateEmail: "snabirye@student.must.ac.ug", cgpa: 3.6, university: "Mbarara University" },
+  { id: 8, jobId: 6, abbr: "ATT", title: "ATC Trainee (Graduate Entry)", dept: "Air Traffic Mgmt", date: "Jun 7, 2026", status: "Declined", completion: 55, candidateName: "Ronald Oulanyah", candidateEmail: "roulanyah@student.gulu.ac.ug", cgpa: 2.8, university: "Gulu University" },
   // ── Generated bulk (IDs 100+, ~907 entries), with CANDIDATE_DEMO's other 2 applications
   // (IDs 20, 21) spliced in at scattered positions — see note above. ─────────
   ...(() => {
     const bulk = generateSeedApplications();
     const extra: Application[] = [
-      { id: 20, jobId: 3, abbr: "SYS", title: "Systems Administrator", dept: "ICT & Systems", date: "May 20, 2026", status: "Under Review", completion: 90, candidateName: "John Bukenya", candidateEmail: "j.bukenya@gmail.com" },
-      { id: 21, jobId: 13, abbr: "NET", title: "Network Engineer", dept: "ICT & Systems", date: "Jun 10, 2026", status: "Pending", completion: 65, candidateName: "John Bukenya", candidateEmail: "j.bukenya@gmail.com" },
+      { id: 20, jobId: 3, abbr: "SYS", title: "Systems Administrator", dept: "ICT & Systems", date: "May 20, 2026", status: "Under Review", completion: 90, candidateName: "John Bukenya", candidateEmail: "jbukenya@gmail.com" },
+      { id: 21, jobId: 13, abbr: "NET", title: "Network Engineer", dept: "ICT & Systems", date: "Jun 10, 2026", status: "Pending", completion: 65, candidateName: "John Bukenya", candidateEmail: "jbukenya@gmail.com" },
     ];
     bulk.splice(Math.floor(bulk.length / 3), 0, extra[0]);
     bulk.splice(Math.floor((bulk.length * 2) / 3), 0, extra[1]);
@@ -556,6 +569,7 @@ const ANALYTICS_KEY  = "caa_analytics_v1";
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [auth, setAuth] = useState<Auth>({ isLoggedIn: false, firstName: "", lastName: "", email: "", accountType: "external" });
+  const [isLoading, setIsLoading] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [signInPromptOpen, setSignInPromptOpen] = useState(false);
   const [jobs, setJobs] = useState<Job[]>(JOBS);
@@ -574,7 +588,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) setAuth(JSON.parse(raw));
+      if (raw) {
+        const stored = JSON.parse(raw) as Auth;
+        // Only restore an authenticated session when the real API token is present.
+        // Without it the stored state came from a prototype/expired session.
+        if (!stored.isLoggedIn || localStorage.getItem("caa_token")) {
+          setAuth(stored);
+        } else {
+          localStorage.removeItem(STORAGE_KEY);
+        }
+      }
       const rj = localStorage.getItem(JOBS_KEY);
       if (rj) setJobs(JSON.parse(rj));
       const ra = localStorage.getItem(APPS_KEY);
@@ -625,12 +648,77 @@ export function AppProvider({ children }: { children: ReactNode }) {
     persist({ isLoggedIn: true, firstName, lastName, email, accountType, employeeNumber: opts?.employeeNumber, effectiveType, adminRole: opts?.adminRole });
   };
 
+  // ── Real API auth ─────────────────────────────────────────────────────────
+  const apiSignIn = async (email: string, password: string) => {
+    setIsLoading(true);
+    try {
+      const res = await authApi.login(email, password);
+      const u = res.data;
+      setToken(u.token);
+      persist({
+        isLoggedIn: true,
+        firstName: u.firstName, lastName: u.lastName, email: u.email,
+        accountType: u.accountType as AccountType,
+        effectiveType: (u.effectiveType ?? u.accountType) as AccountType,
+        adminRole: u.adminRole ?? undefined,
+        employeeNumber: u.employeeNumber ?? undefined,
+      });
+      // Load real data in the background
+      Promise.all([
+        jobsApi.list().then(r => { if (r.success) persistJobs(r.data as unknown as Job[]); }).catch(() => {}),
+        appsApi.list().then(r => { if (r.success) persistApps(r.data as unknown as Application[]); }).catch(() => {}),
+        settingsApi.get().then(r => { if (r.success) setSettings(prev => ({ ...prev, ...(r.data as unknown as AdminSettings) })); }).catch(() => {}),
+        notifApi.list().then(r => { if (r.success) persistNotifs(r.data as unknown as Notification[]); }).catch(() => {}),
+        cvApi.get().then(r => {
+          if (r.success && r.data.photoFile) {
+            const photoUrl = r.data.photoFile;
+            setAuth(prev => {
+              const next = { ...prev, photoUrl };
+              try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch {}
+              return next;
+            });
+          }
+        }).catch(() => {}),
+      ]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const apiRegister = async (data: { email: string; password: string; firstName: string; lastName: string; accountType: AccountType; employeeNumber?: string }) => {
+    setIsLoading(true);
+    try {
+      const res = await authApi.register(data);
+      const u = res.data;
+      setToken(u.token);
+      persist({
+        isLoggedIn: true,
+        firstName: u.firstName, lastName: u.lastName, email: u.email,
+        accountType: u.accountType as AccountType,
+        effectiveType: (u.effectiveType ?? u.accountType) as AccountType,
+      });
+      jobsApi.list().then(r => { if (r.success) persistJobs(r.data as unknown as Job[]); }).catch(() => {});
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const signOut = () => {
+    authApi.logout().catch(() => {});
+    setToken(null);
     persist({ isLoggedIn: false, firstName: "", lastName: "", email: "", accountType: "external" });
   };
 
   const updateProfile = (patch: Partial<Pick<Auth, "firstName" | "lastName" | "email">>) => {
     persist({ ...auth, ...patch });
+  };
+
+  const updatePhotoUrl = (url: string) => {
+    setAuth(prev => {
+      const next = { ...prev, photoUrl: url };
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
   };
 
   const withdrawApplication = (id: number) => {
@@ -813,7 +901,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   return (
     <AppCtx.Provider
       value={{
-        auth, signIn, signOut, updateProfile,
+        auth, isLoading, apiSignIn, apiRegister, signIn, signOut, updateProfile, updatePhotoUrl,
         toasts, pushToast, dismissToast,
         jobs, addJob, updateJob, deleteJob, canSeeJob, isExpired,
         applications, withdrawApplication, addApplication, updateApplicationStatus, bulkUpdateApplicationStatus,

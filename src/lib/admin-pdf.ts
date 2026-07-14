@@ -23,7 +23,7 @@ function header(doc: jsPDF, title: string, subtitle?: string) {
   doc.setFontSize(8);
   doc.setTextColor(80, 80, 80);
   doc.text("Entebbe International Airport  |  P.O. Box 5536, Kampala, Uganda", 36, 23);
-  doc.text("Tel: +256 312 352 000  |  aviation@caa.co.ug  |  www.caa.co.ug", 36, 28);
+  doc.text("Tel: +256 312 352 000  |  aviation@caa.go.ug  |  www.caa.go.ug", 36, 28);
 
   // Blue separator line (matching the letter's blue rule)
   doc.setDrawColor(...NAVY);
@@ -771,7 +771,7 @@ export function downloadJobAdvert(job: Job, actor: string) {
   doc.setFontSize(8.5);
   doc.setTextColor(40, 40, 40);
   const howTo = doc.splitTextToSize(
-    `Eligible candidates should apply online via the CAA Uganda e-Recruitment Portal at caa.co.ug. ` +
+    `Eligible candidates should apply online via the CAA Uganda e-Recruitment Portal at caa.go.ug. ` +
     `Applications must be submitted no later than ${job.closes}. Only shortlisted candidates will be contacted. ` +
     `CAA Uganda does not charge any fees at any stage of recruitment.`,
     178,

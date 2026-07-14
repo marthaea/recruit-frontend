@@ -3,7 +3,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
   ShieldCheck, Bell, FileText, ArrowLeft, Eye, EyeOff, Mail, Lock, CheckCircle2,
 } from "lucide-react";
-import { useApp, isCAAEmail, ADMIN_DEMO, CANDIDATE_DEMO } from "@/context/AppContext";
+import { useApp } from "@/context/AppContext";
 import logo from "@/assets/caa-logo.png";
 
 export const Route = createFileRoute("/login")({
@@ -17,42 +17,27 @@ export const Route = createFileRoute("/login")({
 });
 
 function LoginPage() {
-  const { signIn, pushToast } = useApp();
+  const { apiSignIn, isLoading, pushToast } = useApp();
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [show, setShow] = useState(false);
   const [forgotMsg, setForgotMsg] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!email || !password) {
       pushToast({ type: "warning", title: "Missing details", message: "Enter your email and password to continue." });
       return;
     }
-    // Admin shortcut
-    if (email.trim().toLowerCase() === ADMIN_DEMO.email && password === ADMIN_DEMO.password) {
-      signIn("System", "Administrator", email, { accountType: "admin" });
-      pushToast({ type: "success", title: "Admin signed in", message: "Welcome to the CAA admin console." });
-      navigate({ to: "/admin", search: { tab: "dashboard" } });
-      return;
+    try {
+      await apiSignIn(email.trim(), password);
+      pushToast({ type: "success", title: "Welcome back!", message: "You are now signed in." });
+      navigate({ to: "/vacancies" });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Login failed";
+      pushToast({ type: "warning", title: "Sign in failed", message });
     }
-    // Demo candidate shortcut — signs in as the seeded candidate with existing applications on file.
-    if (email.trim().toLowerCase() === CANDIDATE_DEMO.email) {
-      signIn(CANDIDATE_DEMO.firstName, CANDIDATE_DEMO.lastName, email, { accountType: "external" });
-      pushToast({ type: "success", title: `Welcome back, ${CANDIDATE_DEMO.firstName} ${CANDIDATE_DEMO.lastName}` });
-      navigate({ to: "/dashboard" });
-      return;
-    }
-    // Heuristic: a CAA email = internal; anything else = external (downgraded if user claims internal elsewhere).
-    const accountType = isCAAEmail(email) ? "internal" : "external";
-    signIn("John", "Mugisha", email, { accountType });
-    if (!isCAAEmail(email)) {
-      pushToast({ type: "info", title: "Signed in as external candidate", message: "Internal job listings are not visible without a CAA email." });
-    } else {
-      pushToast({ type: "success", title: "Welcome back, John Mugisha" });
-    }
-    navigate({ to: "/vacancies" });
   };
 
   return (
@@ -171,16 +156,12 @@ function LoginPage() {
               </p>
             )}
 
-            <button type="submit" className="w-full py-3 bg-caa-navy text-white font-semibold rounded-md hover:bg-caa-navy-2 transition-colors">
-              Sign In
+            <button type="submit" disabled={isLoading} className="w-full py-3 bg-caa-navy text-white font-semibold rounded-md hover:bg-caa-navy-2 transition-colors disabled:opacity-60">
+              {isLoading ? "Signing in…" : "Sign In"}
             </button>
 
             <p className="text-[11px] text-caa-muted text-center mt-1">
               Protected by industry-standard encryption · CAA Uganda never asks for your password by phone or email.
-            </p>
-
-            <p className="text-[11px] text-caa-muted text-center bg-caa-surface border border-caa-border rounded-md px-3 py-2">
-              Demo candidate account: <span className="font-medium text-caa-navy">{CANDIDATE_DEMO.email}</span> (any password)
             </p>
           </form>
 
