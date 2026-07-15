@@ -140,9 +140,6 @@ export function Navbar() {
             </button>
             {auth.isLoggedIn ? (
               <div className="flex items-center gap-2 ml-1">
-                <span className="h-8 w-8 rounded-full bg-caa-navy text-white flex items-center justify-center text-xs font-bold">
-                  {auth.firstName.charAt(0)}{auth.lastName.charAt(0)}
-                </span>
                 <span className="text-xs font-medium text-caa-body max-w-[100px] truncate">{auth.firstName}</span>
                 <button
                   onClick={handleSignOut}

@@ -59,8 +59,8 @@ function RegisterPage() {
         accountType: f.accountType,
         employeeNumber: isInternal ? f.employeeNumber.trim() : undefined,
       });
-      pushToast({ type: "success", title: "Account created", message: "You can now browse vacancies and apply." });
-      navigate({ to: "/vacancies" });
+      pushToast({ type: "success", title: "Account created", message: "Welcome! Your dashboard is ready." });
+      navigate({ to: "/dashboard" });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Registration failed";
       pushToast({ type: "warning", title: "Registration failed", message });

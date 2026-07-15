@@ -33,7 +33,7 @@ function LoginPage() {
     try {
       await apiSignIn(email.trim(), password);
       pushToast({ type: "success", title: "Welcome back!", message: "You are now signed in." });
-      navigate({ to: "/vacancies" });
+      navigate({ to: "/dashboard" });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Login failed";
       pushToast({ type: "warning", title: "Sign in failed", message });

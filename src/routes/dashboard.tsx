@@ -4,7 +4,7 @@ import { Check, Circle, Bell, FileText, Eye, Users, Award, Mail, Pencil, X, User
 import { useApp, canWithdraw, type Application } from "@/context/AppContext";
 import { downloadApplicationSummary } from "@/lib/admin-pdf";
 import { PhotoCropModal } from "@/components/PhotoCropModal";
-import { cv as cvApi } from "@/lib/api/client";
+import { cv as cvApi, applications as appsApi } from "@/lib/api/client";
 
 export const Route = createFileRoute("/dashboard")({
   head: () => ({
@@ -90,6 +90,7 @@ function useLiveTime() {
 
 function DashboardPage() {
   const { auth, applications, jobs, withdrawApplication, updateProfile, updatePhotoUrl, pushToast, notifications, markNotificationRead } = useApp();
+  const [liveApps, setLiveApps] = useState<Application[] | null>(null);
   const navigate = useNavigate();
   const now = useLiveTime();
 
@@ -106,6 +107,14 @@ function DashboardPage() {
     if (!auth.isLoggedIn) navigate({ to: "/login" });
   }, [auth.isLoggedIn, navigate]);
 
+  // Refresh application statuses from the server each time the dashboard is opened
+  useEffect(() => {
+    if (!auth.isLoggedIn || !auth.email) return;
+    appsApi.list({ email: auth.email }).then((r) => {
+      if (r.success) setLiveApps(r.data as unknown as Application[]);
+    }).catch(() => {});
+  }, [auth.isLoggedIn, auth.email]);
+
   // Greeting + time
   const hour = now.getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
@@ -118,7 +127,11 @@ function DashboardPage() {
     try {
       const file = new File([blob], "profile.jpg", { type: "image/jpeg" });
       const res = await cvApi.upload(file, "photo");
-      if (res.success && res.data.url) updatePhotoUrl(res.data.url);
+      if (res.success && res.data.url) {
+        updatePhotoUrl(res.data.url);
+        // Persist to DB so the photo survives logout/re-login
+        await cvApi.save({ photoFile: res.data.url });
+      }
     } catch {
       // keep the local data-URL — works fine without a server
     }
@@ -127,7 +140,8 @@ function DashboardPage() {
 
   if (!auth.isLoggedIn) return null;
 
-  const myApplications = applications.filter(
+  // Use fresh API data when available, fall back to context state
+  const myApplications = (liveApps ?? applications).filter(
     (a) => a.candidateEmail?.toLowerCase() === auth.email?.toLowerCase()
   );
 

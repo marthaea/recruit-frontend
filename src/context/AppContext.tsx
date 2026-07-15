@@ -697,7 +697,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         accountType: u.accountType as AccountType,
         effectiveType: (u.effectiveType ?? u.accountType) as AccountType,
       });
-      jobsApi.list().then(r => { if (r.success) persistJobs(r.data as unknown as Job[]); }).catch(() => {});
+      Promise.all([
+        jobsApi.list().then(r => { if (r.success) persistJobs(r.data as unknown as Job[]); }).catch(() => {}),
+        appsApi.list().then(r => { if (r.success) persistApps(r.data as unknown as Application[]); }).catch(() => {}),
+        notifApi.list().then(r => { if (r.success) persistNotifs(r.data as unknown as Notification[]); }).catch(() => {}),
+      ]);
     } finally {
       setIsLoading(false);
     }
@@ -738,13 +742,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
         pushToast({ type: "warning", title: "Application limit reached", message: `You may not have more than ${cap} active application${cap !== 1 ? "s" : ""} at one time.` });
       }
     }
+    const tempId = Date.now();
     const newApp: Application = {
       ...a,
-      id: Date.now(),
+      id: tempId,
       date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
       status: "Pending",
     };
     persistApps([newApp, ...applications]);
+
+    // Persist to database; on success replace the temp ID with the server-assigned one
+    appsApi.create({
+      jobId: a.jobId, abbr: a.abbr, title: a.title, dept: a.dept,
+      candidateEmail: a.candidateEmail, candidateName: a.candidateName,
+      cgpa: (a as unknown as Record<string, unknown>).cgpa as number | undefined,
+      university: (a as unknown as Record<string, unknown>).university as string | undefined,
+      screeningAnswers: a.screeningAnswers as Record<string, string> | undefined,
+    }).then((res) => {
+      if (res.success && res.data?.id && res.data.id !== tempId) {
+        setApplications((prev) => {
+          const next = prev.map((x) => x.id === tempId ? { ...x, id: res.data.id } : x);
+          try { localStorage.setItem(APPS_KEY, JSON.stringify(next)); } catch {}
+          return next;
+        });
+      }
+    }).catch(() => {});
+
     return newApp;
   };
 
@@ -758,6 +781,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       try { localStorage.setItem(APPS_KEY, JSON.stringify(next)); } catch {}
       return next;
     });
+    // Persist to database so changes are visible to the candidate on next load
+    appsApi.updateStatus(appId, status, notifyEmail, notifyMessage).catch(() => {});
     if (notifyEmail && notifyMessage) {
       const type: Notification["type"] =
         status === "Shortlisted" ? "shortlisted" :
@@ -776,6 +801,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       try { localStorage.setItem(APPS_KEY, JSON.stringify(next)); } catch {}
       return next;
     });
+    // Persist all status changes to database in one call
+    appsApi.bulkStatus(updates.map((u) => ({ id: u.id, status: u.status }))).catch(() => {});
   };
 
   const addJob: Ctx["addJob"] = (j) => {

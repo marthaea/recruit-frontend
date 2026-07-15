@@ -100,7 +100,7 @@ function AdminPage() {
         const key = email.trim().toLowerCase();
         const rec = HR_USERS[key];
         if (!rec || rec.password !== pw) {
-          pushToast({ type: "warning", title: "Invalid credentials", message: `Demo logins listed below` });
+          pushToast({ type: "warning", title: "Invalid credentials", message: "Incorrect email or password." });
           return;
         }
         signIn(rec.firstName, rec.lastName, key, { accountType: "admin", adminRole: rec.role });
@@ -235,7 +235,6 @@ function AdminLogin({ onLogin }: { onLogin: (email: string, pw: string) => void 
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
   const [showPw, setShowPw] = useState(false);
-  const demoUsers = Object.entries(HR_USERS).map(([e, u]) => ({ email: e, name: `${u.firstName} ${u.lastName}`, role: u.role, pw: u.password }));
 
   return (
     <div className="flex min-h-[calc(100vh-108px)]">
@@ -314,29 +313,6 @@ function AdminLogin({ onLogin }: { onLogin: (email: string, pw: string) => void 
               Sign In
             </button>
           </form>
-
-          <div className="my-5 flex items-center gap-3 text-xs text-caa-light">
-            <span className="flex-1 h-px bg-caa-border" /> demo accounts <span className="flex-1 h-px bg-caa-border" />
-          </div>
-
-          <div className="space-y-2">
-            {demoUsers.map((u) => (
-              <button key={u.email} onClick={() => onLogin(u.email, u.pw)}
-                className="w-full text-left px-3 py-2.5 rounded-lg bg-gray-50 hover:bg-caa-navy/5 border border-caa-border transition-colors"
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-semibold text-caa-body">{u.name}</p>
-                    <p className="text-[11px] text-caa-muted">{u.email}</p>
-                  </div>
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold capitalize ${
-                    u.role === "super" ? "bg-yellow-100 text-yellow-700" :
-                    u.role === "hr" ? "bg-blue-100 text-blue-700" : "bg-green-100 text-green-700"
-                  }`}>{u.role}</span>
-                </div>
-              </button>
-            ))}
-          </div>
 
           <Link to="/login" className="block text-center text-xs text-caa-muted hover:text-caa-navy mt-6 transition-colors">
             ← Back to candidate sign in
