@@ -729,6 +729,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const app = applications.find((a) => a.id === id);
     if (app && !canWithdraw(app.status)) return;
     persistApps(applications.filter((a) => a.id !== id));
+    // Persist the withdrawal to the database as well
+    appsApi.withdraw(id).catch(() => {});
   };
 
   const addApplication: Ctx["addApplication"] = (a) => {
@@ -751,22 +753,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
     persistApps([newApp, ...applications]);
 
-    // Persist to database; on success replace the temp ID with the server-assigned one
-    appsApi.create({
-      jobId: a.jobId, abbr: a.abbr, title: a.title, dept: a.dept,
-      candidateEmail: a.candidateEmail, candidateName: a.candidateName,
-      cgpa: (a as unknown as Record<string, unknown>).cgpa as number | undefined,
-      university: (a as unknown as Record<string, unknown>).university as string | undefined,
-      screeningAnswers: a.screeningAnswers as Record<string, string> | undefined,
-    }).then((res) => {
-      if (res.success && res.data?.id && res.data.id !== tempId) {
-        setApplications((prev) => {
-          const next = prev.map((x) => x.id === tempId ? { ...x, id: res.data.id } : x);
-          try { localStorage.setItem(APPS_KEY, JSON.stringify(next)); } catch {}
-          return next;
-        });
-      }
-    }).catch(() => {});
+    // Persist to database; on success replace the temp ID with the server-assigned one.
+    // The backend derives job details and candidate identity from the job record and
+    // the auth token, so only the application-specific fields are sent.
+    if (a.jobId != null) {
+      appsApi.submit({
+        jobId: a.jobId,
+        completion: a.completion,
+        cgpa: (a as unknown as Record<string, unknown>).cgpa as number | undefined,
+        university: (a as unknown as Record<string, unknown>).university as string | undefined,
+        screeningAnswers: a.screeningAnswers as Record<string, string> | undefined,
+      }).then((res) => {
+        if (res.success && res.data?.id && res.data.id !== tempId) {
+          setApplications((prev) => {
+            const next = prev.map((x) => x.id === tempId ? { ...x, id: res.data.id } : x);
+            try { localStorage.setItem(APPS_KEY, JSON.stringify(next)); } catch {}
+            return next;
+          });
+        }
+      }).catch(() => {});
+    }
 
     return newApp;
   };
