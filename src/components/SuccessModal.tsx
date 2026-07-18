@@ -1,10 +1,12 @@
 import { Link } from "@tanstack/react-router";
 import { Check } from "lucide-react";
+import { useModalA11y } from "@/hooks/useModalA11y";
 
 export function SuccessModal({ refNumber, jobTitle, onClose }: { refNumber: string; jobTitle: string; onClose: () => void }) {
+  const modalRef = useModalA11y<HTMLDivElement>(onClose);
   return (
     <div className="fixed inset-0 z-[95] bg-caa-navy/70 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl w-full max-w-[480px] p-10 text-center">
+      <div ref={modalRef} role="dialog" aria-modal="true" aria-label="Application submitted" className="bg-white rounded-2xl w-full max-w-[480px] p-10 text-center">
         <div className="mx-auto h-20 w-20 rounded-full bg-caa-success flex items-center justify-center caa-check-anim">
           <Check className="h-10 w-10 text-white" strokeWidth={3} />
         </div>

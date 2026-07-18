@@ -170,6 +170,17 @@
     border-color: var(--color-border);
   }
 
+  /* Respect the user's motion preference: collapse all animations and
+     transitions (including Martha's SVG animations and Tailwind animate-*). */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
   body {
     background-color: var(--caa-surface);
     color: var(--caa-body);

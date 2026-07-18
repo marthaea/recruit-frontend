@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { X, Upload, ZoomIn, Check } from "lucide-react";
+import { useModalA11y } from "@/hooks/useModalA11y";
 
 const CROP_SIZE = 220;
 
@@ -22,6 +23,7 @@ export function PhotoCropModal({ open, currentPhoto, onClose, onSave }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef    = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const modalRef     = useModalA11y<HTMLDivElement>(onClose, open);
 
   useEffect(() => {
     if (!open) {
@@ -148,12 +150,13 @@ export function PhotoCropModal({ open, currentPhoto, onClose, onSave }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+      <div ref={modalRef} role="dialog" aria-modal="true" aria-label="Update profile photo" className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
         {/* Header */}
         <div className="flex items-center justify-between mb-5">
           <h2 className="font-bold text-lg text-caa-body">Update profile photo</h2>
           <button
             onClick={onClose}
+            aria-label="Close"
             className="text-caa-muted hover:text-caa-body p-1 rounded-full hover:bg-caa-surface transition-colors"
           >
             <X className="h-5 w-5" />

@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { z } from "zod";
-import { ArrowLeft, Bookmark, BookmarkCheck, AlertCircle, Printer } from "lucide-react";
+import { ArrowLeft, Bookmark, BookmarkCheck, AlertCircle, Printer, Clock } from "lucide-react";
 import { useApp } from "@/context/AppContext";
+import { closingLabel, isClosingSoon } from "@/lib/deadline";
 import logo from "@/assets/caa-logo.png";
 
 export const Route = createFileRoute("/job")({
@@ -659,7 +660,7 @@ function writeSaved(ids: number[]) {
 
 function JobDetailPage() {
   const { jobId } = Route.useSearch();
-  const { jobs, auth, openSignInPrompt, pushToast, trackEvent } = useApp();
+  const { jobs, auth, openSignInPrompt, pushToast, trackEvent, settings } = useApp();
   const navigate = useNavigate();
   const job = jobs.find((j) => j.id === jobId);
   const [saved, setSaved] = useState(false);
@@ -935,6 +936,14 @@ function JobDetailPage() {
         {isExpired ? (
           <p className="mt-4 text-center text-sm font-semibold text-caa-danger">Applications for this vacancy have closed.</p>
         ) : (
+          <>
+            {closingLabel(job.closesAt) && (
+              <p className={`mt-4 text-center text-sm font-semibold flex items-center justify-center gap-1.5 ${
+                isClosingSoon(job.closesAt, settings.closingSoonDays) ? "text-amber-700" : "text-caa-muted"
+              }`}>
+                <Clock className="h-4 w-4" /> {closingLabel(job.closesAt)} to apply
+              </p>
+            )}
           <div className="mt-4 flex justify-center gap-3 pb-6">
             <button
               onClick={toggleSaved}
@@ -950,6 +959,7 @@ function JobDetailPage() {
               Apply Now
             </button>
           </div>
+          </>
         )}
       </div>
     </div>

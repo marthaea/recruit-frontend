@@ -3,19 +3,26 @@
 
 const BASE = (import.meta.env.VITE_API_URL as string) ?? "http://localhost:5000/api";
 
-// Access token stored in memory, persisted to localStorage for page refresh survival.
-let _token: string | null =
-  typeof localStorage !== "undefined" ? localStorage.getItem("caa_token") : null;
+// Access token lives in memory only — never in localStorage, where any XSS
+// could read it. Sessions survive page reloads via the httpOnly refresh
+// cookie: call restoreSession() on app boot to obtain a fresh access token.
+let _token: string | null = null;
 
 export function setToken(t: string | null) {
   _token = t;
-  if (typeof localStorage !== "undefined") {
-    if (t) localStorage.setItem("caa_token", t);
-    else localStorage.removeItem("caa_token");
-  }
 }
 
 export function getToken() { return _token; }
+
+/**
+ * Re-establish the session from the httpOnly refresh cookie.
+ * Returns true when a fresh access token was obtained.
+ */
+export async function restoreSession(): Promise<boolean> {
+  // Clean up tokens persisted by older versions of the app
+  if (typeof localStorage !== "undefined") localStorage.removeItem("caa_token");
+  return tryRefresh();
+}
 
 async function request<T>(
   method: string,
@@ -110,6 +117,12 @@ export const auth = {
     post<ApiResponse<UserResponse>>("/auth/login", { email, password }),
 
   me: () => get<ApiResponse<UserResponse>>("/auth/me"),
+
+  verifyEmail: (token: string) =>
+    get<ApiResponse<{ message: string; email: string }>>(`/auth/verify-email?token=${encodeURIComponent(token)}`),
+
+  resendVerification: () =>
+    post<ApiResponse<{ message: string }>>("/auth/resend-verification"),
 
   updateProfile: (data: { firstName?: string; lastName?: string; email?: string }) =>
     put<ApiResponse<UserResponse>>("/auth/profile", data),
@@ -219,6 +232,31 @@ export const analyticsApi = {
     get<ApiResponse<AnalyticsSummary>>(`/analytics?days=${days}`),
 };
 
+// ── Chatbot (Martha) ──────────────────────────────────────────────────────────
+export const chatbot = {
+  /** Fire-and-forget: never blocks or breaks the chat on failure. */
+  logQuery: (data: { query: string; matchedQuestion?: string; outcome: "answered" | "suggested" | "fallback"; persona?: string }) =>
+    post<ApiResponse<{ logged: boolean }>>("/chatbot/queries", data).catch(() => null),
+
+  listQueries: (params?: { outcome?: "answered" | "suggested" | "fallback"; days?: number; limit?: number }) => {
+    const qs = params
+      ? "?" + new URLSearchParams(
+          Object.entries(params).filter(([, v]) => v != null).map(([k, v]) => [k, String(v)])
+        ).toString()
+      : "";
+    return get<ListResponse<ChatbotQuery>>(`/chatbot/queries${qs}`);
+  },
+};
+
+export interface ChatbotQuery {
+  id: number;
+  query: string;
+  matchedQuestion: string | null;
+  outcome: "answered" | "suggested" | "fallback";
+  persona: string;
+  askedAt: string;
+}
+
 // ── Criteria ──────────────────────────────────────────────────────────────────
 export const criteria = {
   get: (jobId: number) => get<ApiResponse<JobCriteria>>(`/criteria/${jobId}`),
@@ -255,6 +293,7 @@ export interface UserResponse {
   effectiveType: string;
   adminRole: "super" | "hr" | "recruiter" | null;
   employeeNumber: string | null;
+  emailVerified?: boolean;
   token: string;
 }
 

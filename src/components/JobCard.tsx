@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { MapPin, Calendar, Bookmark, BookmarkCheck } from "lucide-react";
+import { MapPin, Calendar, Bookmark, BookmarkCheck, Clock } from "lucide-react";
 import { useApp, type Job } from "@/context/AppContext";
+import { closingLabel, isClosingSoon } from "@/lib/deadline";
 
 const SAVED_KEY = "caa_saved_jobs_v1";
 function readSaved(): number[] {
@@ -12,10 +13,13 @@ function writeSaved(ids: number[]) {
   try { localStorage.setItem(SAVED_KEY, JSON.stringify(ids)); } catch {}
 }
 export function JobCard({ job }: { job: Job }) {
-  const { pushToast } = useApp();
+  const { pushToast, settings } = useApp();
   const navigate = useNavigate();
   const [saved, setSaved] = useState(false);
   useEffect(() => { setSaved(readSaved().includes(job.id)); }, [job.id]);
+
+  const closingSoon = isClosingSoon(job.closesAt, settings.closingSoonDays);
+  const countdown = closingLabel(job.closesAt);
 
   const toggleSaved = () => {
     const cur = readSaved();
@@ -43,6 +47,11 @@ export function JobCard({ job }: { job: Job }) {
         {job.visibility === "internal" && (
           <span className="px-2 py-0.5 rounded-full bg-caa-navy-2 text-white text-[10px] font-semibold">Internal only</span>
         )}
+        {closingSoon && (
+          <span className="px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 text-[11px] font-semibold flex items-center gap-1">
+            <Clock className="h-3 w-3" /> Closing soon
+          </span>
+        )}
       </div>
       <h3 className="font-bold text-lg text-caa-body leading-snug">{job.title}</h3>
       <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-caa-muted">
@@ -56,6 +65,9 @@ export function JobCard({ job }: { job: Job }) {
       <div className="flex items-center justify-between pt-3 mt-auto border-t border-caa-border">
         <span className="text-xs text-caa-muted flex items-center gap-1.5">
           <Calendar className="h-3.5 w-3.5" /> Closes <span className="text-caa-danger font-medium">{job.closes}</span>
+          {countdown && (
+            <span className={`font-semibold ${closingSoon ? "text-amber-700" : "text-caa-muted"}`}>· {countdown}</span>
+          )}
         </span>
         <div className="flex items-center gap-2">
           <button

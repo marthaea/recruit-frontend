@@ -115,6 +115,15 @@ function DashboardPage() {
     }).catch(() => {});
   }, [auth.isLoggedIn, auth.email]);
 
+  // Load the CV profile to compute real completeness
+  const [cvProfile, setCvProfile] = useState<Record<string, unknown> | null>(null);
+  useEffect(() => {
+    if (!auth.isLoggedIn) return;
+    cvApi.get().then((r) => {
+      if (r.success && r.data) setCvProfile(r.data as unknown as Record<string, unknown>);
+    }).catch(() => {});
+  }, [auth.isLoggedIn]);
+
   // Greeting + time
   const hour = now.getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
@@ -168,15 +177,27 @@ function DashboardPage() {
     pushToast({ type: "success", title: "Profile updated", message: "Your candidate profile changes have been saved." });
   };
 
+  // Real profile completeness, computed from the saved CV profile
+  const cvP = cvProfile as {
+    personal?: Record<string, string>;
+    qualifications?: unknown[];
+    experience?: unknown[];
+    skills?: unknown[];
+    referees?: { name?: string }[];
+    photoFile?: string;
+  } | null;
+  const filled = (s?: string) => !!s && s.trim() !== "";
   const checklist = [
-    { label: "Personal information", done: true },
-    { label: "Contact details", done: true },
-    { label: "CV uploaded", done: true },
-    { label: "Education history", done: true },
-    { label: "Work experience", done: false },
-    { label: "Certificates & licences", done: false },
-    { label: "Referee contacts", done: false },
+    { label: "Personal information", done: !!cvP && filled(cvP.personal?.dob) && filled(cvP.personal?.nin) },
+    { label: "Contact details", done: !!cvP && filled(cvP.personal?.phone) && filled(cvP.personal?.address) },
+    { label: "Profile photo", done: !!auth.photoUrl || filled(cvP?.photoFile) },
+    { label: "Education history", done: (cvP?.qualifications?.length ?? 0) > 0 },
+    { label: "Work experience", done: (cvP?.experience?.length ?? 0) > 0 },
+    { label: "Skills", done: (cvP?.skills?.length ?? 0) > 0 },
+    { label: "Referee contacts", done: (cvP?.referees ?? []).filter((r) => filled(r?.name)).length >= 2 },
   ];
+  const completionPct = Math.round((checklist.filter((c) => c.done).length / checklist.length) * 100);
+  const nextMissing = checklist.find((c) => !c.done);
 
   return (
     <>
@@ -377,9 +398,21 @@ function DashboardPage() {
             <div className="caa-card p-5">
               <h3 className="font-bold text-base text-caa-body">Profile Completion</h3>
               <div className="mt-3 h-2 bg-caa-surface rounded-full overflow-hidden">
-                <div className="h-full bg-gradient-to-r from-caa-navy to-caa-navy-2" style={{ width: "72%" }} />
+                <div
+                  className={`h-full transition-all duration-500 ${completionPct === 100 ? "bg-caa-success" : "bg-gradient-to-r from-caa-navy to-caa-navy-2"}`}
+                  style={{ width: `${completionPct}%` }}
+                />
               </div>
-              <p className="text-xs text-caa-muted mt-2">72% complete · +Documents needed</p>
+              <p className="text-xs text-caa-muted mt-2">
+                {completionPct === 100
+                  ? "100% complete — your profile is ready for applications!"
+                  : `${completionPct}% complete${nextMissing ? ` · next: ${nextMissing.label.toLowerCase()}` : ""}`}
+              </p>
+              {completionPct < 100 && (
+                <p className="text-[11px] text-caa-muted mt-1">
+                  A complete profile is filled into every application automatically — finish it once, reuse it everywhere.
+                </p>
+              )}
               <ul className="mt-4 space-y-2">
                 {checklist.map((c) => (
                   <li key={c.label} className="flex items-center gap-2 text-sm">

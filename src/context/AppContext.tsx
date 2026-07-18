@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useState, useCallback, ReactNode 
 import {
   auth as authApi, jobs as jobsApi, applications as appsApi,
   notifications as notifApi, settings as settingsApi,
-  cv as cvApi, setToken,
+  cv as cvApi, setToken, restoreSession,
 } from "@/lib/api/client";
 
 // ─── Base types ───────────────────────────────────────────────────────────────
@@ -176,6 +176,8 @@ type Auth = {
   accountType: AccountType; employeeNumber?: string;
   effectiveType?: AccountType; adminRole?: AdminRole;
   photoUrl?: string;
+  /** undefined = unknown (legacy account); false = pending verification */
+  emailVerified?: boolean;
 };
 
 // ─── CV ───────────────────────────────────────────────────────────────────────
@@ -277,6 +279,7 @@ type Ctx = {
   signOut: () => void;
   updateProfile: (patch: Partial<Pick<Auth, "firstName" | "lastName" | "email">>) => void;
   updatePhotoUrl: (url: string) => void;
+  markEmailVerified: () => void;
   toasts: Toast[];
   pushToast: (t: Omit<Toast, "id">) => void;
   dismissToast: (id: number) => void;
@@ -590,12 +593,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const stored = JSON.parse(raw) as Auth;
-        // Only restore an authenticated session when the real API token is present.
-        // Without it the stored state came from a prototype/expired session.
-        if (!stored.isLoggedIn || localStorage.getItem("caa_token")) {
+        if (stored.isLoggedIn) {
+          // Restore the UI state optimistically, then revalidate against the
+          // httpOnly refresh cookie. The access token itself is never stored —
+          // restoreSession() obtains a fresh one (or signs the user out).
           setAuth(stored);
+          restoreSession().then((ok) => {
+            if (!ok) {
+              setAuth({ isLoggedIn: false, firstName: "", lastName: "", email: "", accountType: "external" });
+              try { localStorage.removeItem(STORAGE_KEY); } catch {}
+            }
+          });
         } else {
-          localStorage.removeItem(STORAGE_KEY);
+          setAuth(stored);
         }
       }
       const rj = localStorage.getItem(JOBS_KEY);
@@ -662,6 +672,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         effectiveType: (u.effectiveType ?? u.accountType) as AccountType,
         adminRole: u.adminRole ?? undefined,
         employeeNumber: u.employeeNumber ?? undefined,
+        emailVerified: u.emailVerified,
       });
       // Load real data in the background
       Promise.all([
@@ -696,6 +707,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         firstName: u.firstName, lastName: u.lastName, email: u.email,
         accountType: u.accountType as AccountType,
         effectiveType: (u.effectiveType ?? u.accountType) as AccountType,
+        emailVerified: u.emailVerified,
       });
       Promise.all([
         jobsApi.list().then(r => { if (r.success) persistJobs(r.data as unknown as Job[]); }).catch(() => {}),
@@ -715,6 +727,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const updateProfile = (patch: Partial<Pick<Auth, "firstName" | "lastName" | "email">>) => {
     persist({ ...auth, ...patch });
+  };
+
+  const markEmailVerified = () => {
+    persist({ ...auth, emailVerified: true });
   };
 
   const updatePhotoUrl = (url: string) => {
@@ -934,7 +950,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   return (
     <AppCtx.Provider
       value={{
-        auth, isLoading, apiSignIn, apiRegister, signIn, signOut, updateProfile, updatePhotoUrl,
+        auth, isLoading, apiSignIn, apiRegister, signIn, signOut, updateProfile, updatePhotoUrl, markEmailVerified,
         toasts, pushToast, dismissToast,
         jobs, addJob, updateJob, deleteJob, canSeeJob, isExpired,
         applications, withdrawApplication, addApplication, updateApplicationStatus, bulkUpdateApplicationStatus,

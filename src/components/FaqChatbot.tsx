@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { X, Send, ChevronDown } from "lucide-react";
 import { MarthaAvatar } from "./MarthaAvatar";
 import { useApp } from "@/context/AppContext";
+import { chatbot as chatbotApi } from "@/lib/api/client";
 
 // ── FAQ data — keyword arrays must be lowercase ───────────────────────────────
 // followUps entries must exactly match another entry's `question` string so the
@@ -550,37 +551,145 @@ const SMALL_TALK: SmallTalkRule[] = [
   },
 ];
 
-// ── Answer resolution ─────────────────────────────────────────────────────────
+// ── Matching engine ───────────────────────────────────────────────────────────
+// Three-tier resolution: strong match → answer; weak match → "did you mean?"
+// suggestions; no match → fallback (optionally bridged from the last topic).
+// Words are compared with typo tolerance (edit distance scaled by length).
 
-type BotReply = { text: string; followUps?: string[] };
+const STOP_WORDS = new Set([
+  "the", "and", "for", "can", "are", "does", "do", "about", "with", "your", "you",
+  "this", "that", "what", "how", "who", "when", "where", "why", "which", "is", "in",
+  "on", "of", "to", "a", "an", "i", "my", "me", "it", "at", "be", "or", "if",
+]);
 
-function resolve(query: string, starterTopics: string[]): BotReply {
+function normalize(s: string): string {
+  return s.toLowerCase().replace(/[^\w\s@.'-]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function editDistance(a: string, b: string): number {
+  const m = a.length, n = b.length;
+  const dp = new Array(n + 1);
+  for (let j = 0; j <= n; j++) dp[j] = j;
+  for (let i = 1; i <= m; i++) {
+    let prev = dp[0];
+    dp[0] = i;
+    for (let j = 1; j <= n; j++) {
+      const tmp = dp[j];
+      dp[j] = Math.min(dp[j] + 1, dp[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1));
+      prev = tmp;
+    }
+  }
+  return dp[n];
+}
+
+/** Typo-tolerant word comparison: 1 edit for words of 5–7 chars, 2 for 8+. */
+function wordsMatch(a: string, b: string): boolean {
+  if (a === b) return true;
+  if (Math.min(a.length, b.length) < 3) return false;
+  const len = Math.max(a.length, b.length);
+  if (len < 5) return false;
+  const maxD = len >= 8 ? 2 : 1;
+  return Math.abs(a.length - b.length) <= maxD && editDistance(a, b) <= maxD;
+}
+
+function scoreEntry(faq: FaqEntry, qNorm: string, qWords: string[], contextBoost: Set<string> | null): number {
+  let score = 0;
+  for (const kw of faq.keywords) {
+    if (qNorm.includes(kw)) {
+      score += kw.length * 2; // exact phrase hit
+      continue;
+    }
+    // fuzzy hit: the keyword's significant words appear (typo-tolerantly) in the query;
+    // partial hits on multi-word keywords earn reduced credit → "did you mean?" territory
+    const kwWords = kw.split(" ").filter((w) => !STOP_WORDS.has(w));
+    if (kwWords.length === 0) continue;
+    const hits = kwWords.filter((kww) => qWords.some((qw) => wordsMatch(qw, kww))).length;
+    if (hits === kwWords.length) score += kw.length;
+    else if (hits > 0 && hits * 2 >= kwWords.length) score += Math.floor((kw.length * hits) / (kwWords.length * 2));
+  }
+  // light credit for overlap with the question text itself
+  for (const w of normalize(faq.question).split(" ")) {
+    if (w.length > 3 && !STOP_WORDS.has(w) && qWords.some((qw) => wordsMatch(qw, w))) score += 2;
+  }
+  // stay-on-topic bonus: entries related to the previous answer rank higher
+  if (contextBoost?.has(faq.question)) score += 4;
+  return score;
+}
+
+const STRONG_MATCH = 8;
+
+const SUGGEST_INTROS = [
+  "I'm not 100% sure what you mean — is it one of these?",
+  "I might have something on that. Did you mean:",
+  "Let me check I understood you — are you asking about one of these?",
+];
+
+const CONTEXT_BRIDGES = [
+  (q: string) => `If you're still asking about "${q}" — these might help:`,
+  (q: string) => `I think that follows on from "${q}". Here's what usually comes next:`,
+];
+
+type BotReply = {
+  text: string;
+  followUps?: string[];
+  /** For query logging: how the question was resolved. */
+  outcome: "answered" | "suggested" | "fallback" | "smalltalk";
+  matched?: string;
+  /** The entry to remember as conversation context. */
+  entry?: FaqEntry;
+};
+
+function resolve(query: string, starterTopics: string[], lastEntry: FaqEntry | null): BotReply {
   const q = query.toLowerCase().trim();
 
   // Small talk first — keeps Martha feeling human
   for (const rule of SMALL_TALK) {
     if (rule.test.test(q)) {
-      return { text: pick(rule.replies), followUps: rule.starters ? starterTopics : rule.followUps };
+      return { text: pick(rule.replies), followUps: rule.starters ? starterTopics : rule.followUps, outcome: "smalltalk" };
     }
   }
 
   // Exact question match (from follow-up chips)
   const exact = FAQS.find((f) => f.question.toLowerCase() === q);
-  if (exact) return { text: exact.answer, followUps: exact.followUps };
+  if (exact) return { text: exact.answer, followUps: exact.followUps, outcome: "answered", matched: exact.question, entry: exact };
 
-  // Keyword scoring
-  let bestScore = 0;
-  let best: FaqEntry | null = null;
-  for (const faq of FAQS) {
-    const score = faq.keywords.reduce((s, kw) => s + (q.includes(kw) ? kw.length : 0), 0);
-    if (score > bestScore) {
-      bestScore = score;
-      best = faq;
-    }
+  // Scored fuzzy matching, biased toward the current topic
+  const qNorm = normalize(query);
+  const qWords = qNorm.split(" ").filter((w) => !STOP_WORDS.has(w));
+  const contextBoost = lastEntry?.followUps ? new Set(lastEntry.followUps) : null;
+
+  const ranked = FAQS
+    .map((faq) => ({ faq, score: scoreEntry(faq, qNorm, qWords, contextBoost) }))
+    .filter((r) => r.score > 0)
+    .sort((a, b) => b.score - a.score);
+
+  if (ranked.length > 0 && ranked[0].score >= STRONG_MATCH) {
+    const best = ranked[0].faq;
+    return { text: best.answer, followUps: best.followUps, outcome: "answered", matched: best.question, entry: best };
   }
-  if (best) return { text: best.answer, followUps: best.followUps };
 
-  return { text: pick(FALLBACKS), followUps: pick(FALLBACK_TOPICS) };
+  if (ranked.length > 0) {
+    // Weak signal — don't guess confidently; offer the top candidates instead
+    const candidates = ranked.slice(0, 3).map((r) => r.faq.question);
+    return {
+      text: pick(SUGGEST_INTROS),
+      followUps: candidates,
+      outcome: "suggested",
+      matched: candidates[0],
+    };
+  }
+
+  // Nothing matched — maybe it's a short follow-up about the previous topic
+  if (lastEntry && /\b(that|this|it|how long|what next|then|after|next step|more)\b/.test(q)) {
+    return {
+      text: pick(CONTEXT_BRIDGES)(lastEntry.question),
+      followUps: lastEntry.followUps ?? starterTopics,
+      outcome: "suggested",
+      matched: lastEntry.question,
+    };
+  }
+
+  return { text: pick(FALLBACKS), followUps: pick(FALLBACK_TOPICS), outcome: "fallback" };
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -609,6 +718,9 @@ export function FaqChatbot() {
   const [typing, setTyping] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
   const conversationStarted = useRef(false);
+  // Conversation context: the last FAQ Martha answered, used to bias matching
+  // toward related topics and to bridge vague follow-ups ("how long does that take?").
+  const lastEntryRef = useRef<FaqEntry | null>(null);
 
   // If the user signs in/out (or their role changes) before chatting,
   // refresh the greeting and suggestions to match who they are.
@@ -640,9 +752,22 @@ export function FaqChatbot() {
     // Slightly randomised delay so Martha feels less mechanical
     const delay = 500 + Math.random() * 600;
     setTimeout(() => {
-      const reply = resolve(trimmed, topics);
+      const reply = resolve(trimmed, topics, lastEntryRef.current);
+      if (reply.entry) lastEntryRef.current = reply.entry;
       setTyping(false);
       setMessages((prev) => [...prev, { from: "bot", text: reply.text, followUps: reply.followUps }]);
+
+      // Log typed questions so HR can see what Martha couldn't answer.
+      // Chip clicks (exact question matches) and small talk are noise — skip them.
+      const isChipClick = reply.outcome === "answered" && reply.matched?.toLowerCase() === trimmed.toLowerCase();
+      if (reply.outcome !== "smalltalk" && !isChipClick) {
+        chatbotApi.logQuery({
+          query: trimmed,
+          matchedQuestion: reply.matched,
+          outcome: reply.outcome as "answered" | "suggested" | "fallback",
+          persona,
+        });
+      }
     }, delay);
   };
 
