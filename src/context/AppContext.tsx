@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useState, useCallback, ReactNode 
 import {
   auth as authApi, jobs as jobsApi, applications as appsApi,
   notifications as notifApi, settings as settingsApi,
-  cv as cvApi, setToken, restoreSession,
+  cv as cvApi, setToken, restoreSession, setSessionExpiredHandler,
 } from "@/lib/api/client";
 
 // ─── Base types ───────────────────────────────────────────────────────────────
@@ -650,6 +650,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // which age past "today" and quietly filter themselves out of every listing.
     jobsApi.list().then(r => { if (r.success) persistJobs(r.data as unknown as Job[]); }).catch(() => {});
     settingsApi.get().then(r => { if (r.success) setSettings(prev => ({ ...prev, ...(r.data as unknown as AdminSettings) })); }).catch(() => {});
+  }, []);
+
+  // A local-only session (e.g. the demo admin shortcut, which sets isLoggedIn
+  // without ever obtaining a real backend token) looks "logged in" here but
+  // has nothing to authenticate with. The first real API call it makes gets
+  // rejected, and without clearing this persisted flag too, the next reload
+  // just repeats the same failure — see setSessionExpiredHandler in client.ts.
+  useEffect(() => {
+    setSessionExpiredHandler(() => {
+      persist({ isLoggedIn: false, firstName: "", lastName: "", email: "", accountType: "external" });
+    });
   }, []);
 
   const persist = (a: Auth) => {

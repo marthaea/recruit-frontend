@@ -14,6 +14,15 @@ export function setToken(t: string | null) {
 
 export function getToken() { return _token; }
 
+// Lets AppContext clear its persisted "logged in" flag when a session turns
+// out to be unrecoverable (see the 401 handler below) — without this, a stale
+// local-only session (e.g. one that never obtained a real token) re-triggers
+// the same failure on every reload, producing a reload loop.
+let _onSessionExpired: (() => void) | null = null;
+export function setSessionExpiredHandler(fn: () => void) {
+  _onSessionExpired = fn;
+}
+
 /**
  * Re-establish the session from the httpOnly refresh cookie.
  * Returns true when a fresh access token was obtained.
@@ -64,7 +73,13 @@ async function request<T>(
       return retry.json();
     }
     setToken(null);
-    if (typeof window !== "undefined") window.location.href = "/login";
+    _onSessionExpired?.();
+    // Guard against a reload loop: if we're already on /login (or this fires
+    // again before the redirect below finishes), don't re-navigate — a
+    // same-URL href assignment still forces a fresh full-page reload.
+    if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+      window.location.href = "/login";
+    }
     throw new Error("Session expired");
   }
 
