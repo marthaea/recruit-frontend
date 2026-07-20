@@ -642,6 +642,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const ran = localStorage.getItem(ANALYTICS_KEY);
       if (ran) setAnalyticsEvents((seed) => [...seed, ...JSON.parse(ran)]);
     } catch {}
+
+    // Load live vacancies + portal settings from the backend for every visitor,
+    // logged in or not — the hardcoded/localStorage jobs above are only a
+    // same-paint fallback so the page isn't blank while this resolves. Without
+    // this, anonymous visitors were stuck on the seed data's fixed closing dates,
+    // which age past "today" and quietly filter themselves out of every listing.
+    jobsApi.list().then(r => { if (r.success) persistJobs(r.data as unknown as Job[]); }).catch(() => {});
+    settingsApi.get().then(r => { if (r.success) setSettings(prev => ({ ...prev, ...(r.data as unknown as AdminSettings) })); }).catch(() => {});
   }, []);
 
   const persist = (a: Auth) => {
