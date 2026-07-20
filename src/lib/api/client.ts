@@ -289,9 +289,10 @@ export const permissions = {
 // ── Staff ─────────────────────────────────────────────────────────────────────
 export const staff = {
   list: () => get<ListResponse<StaffMember>>("/staff"),
-  create: (data: Partial<StaffMember>) => post<ApiResponse<StaffMember>>("/staff", data),
-  update: (id: number, data: Partial<StaffMember>) => put<ApiResponse<StaffMember>>(`/staff/${id}`, data),
-  delete: (id: number) => del<ApiResponse<{ message: string }>>(`/staff/${id}`),
+  create: (data: {
+    employeeNumber: string; firstName: string; lastName: string;
+    dept?: string; position?: string; email?: string; joined?: string; status?: string;
+  }) => post<ApiResponse<StaffMember>>("/staff", data),
 };
 
 // ── Response type helpers ─────────────────────────────────────────────────────
@@ -382,8 +383,9 @@ export interface PermissionOverride {
 }
 
 export interface StaffMember {
-  id: number; employeeNumber: string; firstName: string; lastName: string;
-  department: string | null; jobTitle: string | null; email: string | null; isActive: boolean;
+  id: number; empNo: string; firstName: string; lastName: string;
+  dept: string | null; position: string | null; email: string | null;
+  joined: string | null; status: string;
 }
 
 export interface UploadResult {

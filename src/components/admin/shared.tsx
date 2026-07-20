@@ -8,8 +8,8 @@ import {
 
 // ─── Staff data ───────────────────────────────────────────────────────────────
 
-const DEPT_LIST = ["Air Traffic Mgmt", "Aviation Safety", "Finance & Admin", "ICT & Systems", "Legal", "Operations", "Human Resources", "Procurement", "Engineering", "Communications"];
-const POSITIONS = ["Director", "Manager", "Senior Officer", "Officer", "Analyst", "Coordinator", "Specialist", "Assistant"];
+export const DEPT_LIST = ["Air Traffic Mgmt", "Aviation Safety", "Finance & Admin", "ICT & Systems", "Legal", "Operations", "Human Resources", "Procurement", "Engineering", "Communications"];
+export const POSITIONS = ["Director", "Manager", "Senior Officer", "Officer", "Analyst", "Coordinator", "Specialist", "Assistant"];
 
 export const STAFF_DATA: StaffRecord[] = Object.entries(CAA_STAFF).map(([empNo, { firstName, lastName }], i) => ({
   empNo, firstName, lastName,
