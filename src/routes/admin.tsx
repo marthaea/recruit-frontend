@@ -4,10 +4,10 @@ import { z } from "zod";
 import {
   Users, Briefcase, LayoutDashboard, FileText, GraduationCap, Download,
   ClipboardList, Settings, ChevronRight, Bell, Lock, Filter, Mail, Menu, X,
-  Activity, RefreshCw,
+  Activity, RefreshCw, ClipboardCheck, CheckSquare, ListChecks, Users2, UserCog,
 } from "lucide-react";
 import {
-  useApp, canAccess,
+  useApp, canAccess, ROLE_DEFAULTS, ADMIN_ROLE_LABELS,
   type Job, type Application,
 } from "@/context/AppContext";
 import { AdminLogin } from "@/components/admin/AdminLogin";
@@ -22,13 +22,18 @@ import { CriteriaTab } from "@/components/admin/CriteriaTab";
 import { AuditTab } from "@/components/admin/AuditTab";
 import { SettingsTab } from "@/components/admin/SettingsTab";
 import { PermissionsTab } from "@/components/admin/PermissionsTab";
+import { AdministrationTab } from "@/components/admin/AdministrationTab";
 import { EmailsTab } from "@/components/admin/EmailsTab";
 
 // ─── Route ────────────────────────────────────────────────────────────────────
 
 export const Route = createFileRoute("/admin")({
   validateSearch: z.object({
-    tab: z.enum(["login", "dashboard", "jobs", "apps", "emails", "interns", "analytics", "staff", "reports", "audit", "settings", "criteria", "permissions"]).optional(),
+    tab: z.enum([
+      "login", "dashboard", "jobs", "review-jobs", "approve-jobs", "apps",
+      "shortlisting", "interview-panel", "emails", "interns", "analytics",
+      "staff", "reports", "audit", "settings", "criteria", "permissions", "administration",
+    ]).optional(),
     jobId: z.coerce.number().optional(),
   }),
   head: () => ({ meta: [{ title: "HR Console — CAA Uganda" }] }),
@@ -38,23 +43,28 @@ export const Route = createFileRoute("/admin")({
 // ─── RBAC-aware nav, grouped into sidebar sections ────────────────────────────
 
 const ALL_NAV = [
-  { key: "dashboard",   label: "Dashboard",        Icon: LayoutDashboard,  perm: null,                            group: "Overview" },
-  { key: "jobs",        label: "Job Listings",      Icon: Briefcase,        perm: "canManageJobs" as const,        group: "Recruitment" },
-  { key: "apps",        label: "Applications",      Icon: FileText,         perm: "canViewApplications" as const,  group: "Recruitment" },
-  { key: "interns",     label: "Interns (CGPA)",    Icon: GraduationCap,    perm: "canViewApplications" as const,  group: "Recruitment" },
-  { key: "criteria",    label: "Criteria Setup",    Icon: Filter,           perm: "canManageCriteria" as const,    group: "Recruitment" },
-  { key: "emails",      label: "Email Log",         Icon: Mail,             perm: "canViewApplications" as const,  group: "Recruitment" },
-  { key: "staff",       label: "Internal Staff",    Icon: Users,            perm: "canViewStaff" as const,         group: "People & Insights" },
-  { key: "analytics",   label: "Site Analytics",    Icon: Activity,         perm: "canViewAudit" as const,         group: "People & Insights" },
-  { key: "reports",     label: "Reports & Exports", Icon: Download,         perm: "canExport" as const,            group: "People & Insights" },
-  { key: "audit",       label: "Audit Log",         Icon: ClipboardList,    perm: "canViewAudit" as const,         group: "System" },
-  { key: "settings",    label: "Settings",          Icon: Settings,         perm: "canManageSettings" as const,    group: "System" },
-  { key: "permissions", label: "Permissions",       Icon: Lock,             perm: "canGrantPermissions" as const,  group: "System" },
+  { key: "dashboard",        label: "Dashboard",        Icon: LayoutDashboard,  perm: null,                              group: "Overview" },
+  { key: "jobs",             label: "Create Job",       Icon: Briefcase,        perm: "canManageJobs" as const,          group: "Recruitment" },
+  { key: "review-jobs",      label: "Review Job",       Icon: ClipboardCheck,   perm: "canReviewJob" as const,           group: "Recruitment" },
+  { key: "approve-jobs",     label: "Approve & Publish", Icon: CheckSquare,     perm: "canApproveJob" as const,          group: "Recruitment" },
+  { key: "apps",             label: "Applications",     Icon: FileText,         perm: "canViewApplications" as const,    group: "Recruitment" },
+  { key: "shortlisting",     label: "Shortlisting",     Icon: ListChecks,       perm: "canShortlist" as const,           group: "Recruitment" },
+  { key: "interview-panel",  label: "Interview Panel",  Icon: Users2,           perm: "canShortlist" as const,           group: "Recruitment" },
+  { key: "interns",          label: "Interns (CGPA)",   Icon: GraduationCap,    perm: "canViewApplications" as const,    group: "Recruitment" },
+  { key: "criteria",         label: "Criteria Setup",   Icon: Filter,           perm: "canManageCriteria" as const,      group: "Recruitment" },
+  { key: "emails",           label: "Email Log",        Icon: Mail,             perm: "canViewApplications" as const,    group: "Recruitment" },
+  { key: "staff",            label: "Internal Staff",   Icon: Users,            perm: "canViewStaff" as const,           group: "People & Insights" },
+  { key: "analytics",        label: "Site Analytics",   Icon: Activity,         perm: "canViewAudit" as const,           group: "People & Insights" },
+  { key: "reports",          label: "Reports & Exports", Icon: Download,        perm: "canExport" as const,              group: "People & Insights" },
+  { key: "audit",            label: "Audit Log",        Icon: ClipboardList,    perm: "canViewAudit" as const,           group: "System" },
+  { key: "settings",         label: "Settings",         Icon: Settings,         perm: "canManageSettings" as const,      group: "System" },
+  { key: "administration",   label: "Manage Admins",    Icon: UserCog,          perm: "canManageAdmins" as const,        group: "Administration" },
+  { key: "permissions",      label: "Assign Rights",    Icon: Lock,             perm: "canAssignRights" as const,        group: "Administration" },
 ] as const;
 
 type AdminTab = typeof ALL_NAV[number]["key"];
 
-const NAV_GROUPS = ["Overview", "Recruitment", "People & Insights", "System"] as const;
+const NAV_GROUPS = ["Overview", "Recruitment", "People & Insights", "System", "Administration"] as const;
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
@@ -129,11 +139,11 @@ function AdminPage() {
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/50">HR Console</p>
           <p className="text-sm font-semibold text-white mt-0.5">{auth.firstName} {auth.lastName}</p>
-          <span className={`mt-1 inline-block text-[10px] px-2 py-0.5 rounded-full font-semibold capitalize ${
+          <span className={`mt-1 inline-block text-[10px] px-2 py-0.5 rounded-full font-semibold ${
             role === "super" ? "bg-yellow-400/20 text-yellow-300" :
             role === "hr" ? "bg-blue-400/20 text-blue-300" :
             "bg-green-400/20 text-green-300"
-          }`}>{role === "super" ? "Super Admin" : role === "hr" ? "HR Director" : "Recruiter"}</span>
+          }`}>{ADMIN_ROLE_LABELS[role]}</span>
         </div>
         <button onClick={() => setMobileNavOpen(false)} className="md:hidden text-white/60 hover:text-white shrink-0 p-1" aria-label="Close menu">
           <X className="h-5 w-5" />
@@ -207,8 +217,12 @@ function AdminPage() {
         </div>
         <div className="px-4 sm:px-6 py-4 sm:py-6 max-w-5xl">
           {tab === "dashboard"   && <DashboardTab jobs={jobs} applications={applications} isExpired={isExpired} navigate={navigate} role={role} settings={settings} />}
-          {tab === "jobs"        && canAccess(role, "canManageJobs", perms) && <JobsTab jobs={jobs} applications={applications} isExpired={isExpired} addJob={addJob} updateJob={updateJob} deleteJob={deleteJob} onViewApps={(id: number) => navigate({ to: "/admin", search: { tab: "apps", jobId: id } })} />}
+          {tab === "jobs"        && canAccess(role, "canManageJobs", perms) && <JobsTab jobs={jobs} applications={applications} isExpired={isExpired} addJob={addJob} updateJob={updateJob} deleteJob={deleteJob} onViewApps={(id: number) => navigate({ to: "/admin", search: { tab: "apps", jobId: id } })} viewMode="create" />}
+          {tab === "review-jobs" && canAccess(role, "canReviewJob", perms) && <JobsTab jobs={jobs} applications={applications} isExpired={isExpired} onViewApps={(id: number) => navigate({ to: "/admin", search: { tab: "apps", jobId: id } })} viewMode="review" />}
+          {tab === "approve-jobs" && canAccess(role, "canApproveJob", perms) && <JobsTab jobs={jobs} applications={applications} isExpired={isExpired} onViewApps={(id: number) => navigate({ to: "/admin", search: { tab: "apps", jobId: id } })} viewMode="approve" />}
           {tab === "apps"        && canAccess(role, "canViewApplications", perms) && <AppsTab jobs={jobs} applications={applications} jobId={jobId} cvStore={cvStore} updateStatus={updateApplicationStatus} bulkUpdateStatus={bulkUpdateApplicationStatus} logAction={logAction} actor={actor} criteria={criteria} role={role} perms={perms} logEmail={logEmail} bulkLogEmails={bulkLogEmails} />}
+          {tab === "shortlisting" && canAccess(role, "canShortlist", perms) && <AppsTab jobs={jobs} applications={applications} jobId={jobId} cvStore={cvStore} updateStatus={updateApplicationStatus} bulkUpdateStatus={bulkUpdateApplicationStatus} logAction={logAction} actor={actor} criteria={criteria} role={role} perms={perms} logEmail={logEmail} bulkLogEmails={bulkLogEmails} initialStatusFilter="Shortlisted" />}
+          {tab === "interview-panel" && canAccess(role, "canShortlist", perms) && <AppsTab jobs={jobs} applications={applications} jobId={jobId} cvStore={cvStore} updateStatus={updateApplicationStatus} bulkUpdateStatus={bulkUpdateApplicationStatus} logAction={logAction} actor={actor} criteria={criteria} role={role} perms={perms} logEmail={logEmail} bulkLogEmails={bulkLogEmails} initialStatusFilter="Interview" />}
           {tab === "emails"      && canAccess(role, "canViewApplications", perms) && <EmailsTab sentEmails={sentEmails} clearEmailLog={clearEmailLog} />}
           {tab === "interns"     && canAccess(role, "canViewApplications", perms) && <InternsTab applications={applications} jobs={jobs} actor={actor} updateStatus={updateApplicationStatus} bulkUpdateStatus={bulkUpdateApplicationStatus} canShortlist={canAccess(role, "canShortlist", perms)} logAction={logAction} />}
           {tab === "analytics"   && canAccess(role, "canViewAudit", perms) && <AnalyticsTab analyticsEvents={analyticsEvents} />}
@@ -217,7 +231,8 @@ function AdminPage() {
           {tab === "criteria"    && canAccess(role, "canManageCriteria", perms) && <CriteriaTab jobs={jobs} criteria={criteria} saveCriteria={saveCriteria} logAction={logAction} />}
           {tab === "audit"       && canAccess(role, "canViewAudit", perms) && <AuditTab audit={audit} actor={actor} />}
           {tab === "settings"    && canAccess(role, "canManageSettings", perms) && <SettingsTab settings={settings} updateSettings={updateSettings} logAction={logAction} />}
-          {tab === "permissions" && canAccess(role, "canGrantPermissions", perms) && <PermissionsTab overrides={permissionOverrides} save={savePermissionOverride} logAction={logAction} />}
+          {tab === "administration" && canAccess(role, "canManageAdmins", perms) && <AdministrationTab logAction={logAction} />}
+          {tab === "permissions" && canAccess(role, "canAssignRights", perms) && <PermissionsTab overrides={permissionOverrides} save={savePermissionOverride} logAction={logAction} roleDefaults={ROLE_DEFAULTS} />}
           {/* Access denied fallback */}
           {tab !== "dashboard" && tab !== "login" && !visibleNav.find((n) => n.key === tab) && (
             <div className="text-center py-16">

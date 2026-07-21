@@ -11,11 +11,11 @@ import {
 } from "@/lib/admin-pdf";
 import { buildEmail, autoQualify, STATUS_COLORS, fi, EmptyState, type ScreeningResult } from "./shared";
 
-export function AppsTab({ jobs, applications, jobId, cvStore, updateStatus, bulkUpdateStatus, logAction, actor, criteria, role, perms, logEmail, bulkLogEmails }: any) {
+export function AppsTab({ jobs, applications, jobId, cvStore, updateStatus, bulkUpdateStatus, logAction, actor, criteria, role, perms, logEmail, bulkLogEmails, initialStatusFilter }: any) {
   const filtered = jobId ? applications.filter((a: Application) => a.jobId === jobId) : applications;
   const job = jobs.find((j: Job) => j.id === jobId);
   const [selected, setSelected] = useState<Application | null>(null);
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState(initialStatusFilter ?? "all");
   const [screeningResult, setScreeningResult] = useState<{ results: ScreeningResult[]; confirmed: boolean } | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [view, setView] = useState<"table" | "board">("table");

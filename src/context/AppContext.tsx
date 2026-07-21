@@ -2,7 +2,8 @@ import { createContext, useContext, useEffect, useState, useCallback, ReactNode 
 import {
   auth as authApi, jobs as jobsApi, applications as appsApi,
   notifications as notifApi, settings as settingsApi,
-  cv as cvApi, criteria as criteriaApi, departments as departmentsApi, setToken, restoreSession, setSessionExpiredHandler,
+  cv as cvApi, criteria as criteriaApi, departments as departmentsApi, permissions as permissionsApi,
+  setToken, restoreSession, setSessionExpiredHandler,
   type UserResponse, type Department,
 } from "@/lib/api/client";
 
@@ -12,7 +13,13 @@ export type Visibility = "external" | "internal";
 export type QualLevel = "O-Level" | "A-Level" | "Certificate" | "Diploma" | "Degree" | "Masters" | "PhD";
 export type ApplicationStatus = "Pending" | "Under Review" | "Shortlisted" | "Interview" | "Offered" | "Declined";
 export const APPLICATION_STATUSES: ApplicationStatus[] = ["Pending", "Under Review", "Shortlisted", "Interview", "Offered", "Declined"];
-export type AdminRole = "super" | "hr" | "recruiter";
+export type AdminRole = "super" | "hr" | "recruiter" | "auditor" | "hr_officer" | "it_admin" | "dhra" | "hod";
+export const ADMIN_ROLES: AdminRole[] = ["super", "hr", "recruiter", "auditor", "hr_officer", "it_admin", "dhra", "hod"];
+export const ADMIN_ROLE_LABELS: Record<AdminRole, string> = {
+  super: "Super Admin", hr: "HR Manager", recruiter: "Recruiter",
+  auditor: "Auditor", hr_officer: "HR Officer", it_admin: "IT Admin",
+  dhra: "DHRA (Director HR & Administration)", hod: "Head of Department",
+};
 export type AuditEntry = { id: number; at: string; actor: string; role: string; action: string; target?: string };
 export type AdminSettings = {
   minAgeThreshold: number;
@@ -99,16 +106,27 @@ export type PermissionOverride = {
   canViewApplications: boolean;
   canScreenInterns: boolean;
   canSendNotifications: boolean;
+  canReviewJob: boolean;
+  canApproveJob: boolean;
+  canManageDepartments: boolean;
+  canManageAdmins: boolean;
+  canAssignRights: boolean;
 };
 
 // ─── RBAC ─────────────────────────────────────────────────────────────────────
-
-const ROLE_DEFAULTS: Record<AdminRole, Partial<PermissionOverride>> = {
+// This starts as a hardcoded fallback (so the console isn't blank for the
+// instant between an admin logging in and the fetch below completing), then
+// gets overwritten with the real thing from GET /api/permissions/roles/defaults
+// — the backend is the single source of truth, this is no longer an
+// independently-maintained copy. See setRoleDefaults() / apiSignIn.
+export let ROLE_DEFAULTS: Record<AdminRole, Partial<PermissionOverride>> = {
   super: {
     canViewAudit: true, canManageJobs: true, canExport: true, canViewStaff: true,
     canManageSettings: true, canGrantPermissions: true, canManageCriteria: true,
     canShortlist: true, canViewApplications: true,
     canScreenInterns: true, canSendNotifications: true,
+    canReviewJob: true, canApproveJob: true, canManageDepartments: true,
+    canManageAdmins: true, canAssignRights: true,
   },
   hr: {
     canViewAudit: false, canManageJobs: true, canExport: true, canViewStaff: true,
@@ -122,7 +140,23 @@ const ROLE_DEFAULTS: Record<AdminRole, Partial<PermissionOverride>> = {
     canShortlist: true, canViewApplications: true,
     canScreenInterns: false, canSendNotifications: false,
   },
+  auditor: { canExport: true, canViewAudit: true },
+  hr_officer: {
+    canViewApplications: true, canShortlist: true, canManageJobs: true,
+    canManageCriteria: true, canSendNotifications: true,
+  },
+  it_admin: { canAssignRights: true },
+  dhra: {
+    canViewApplications: true, canShortlist: true, canApproveJob: true,
+    canExport: true, canViewAudit: true,
+  },
+  hod: { canViewApplications: true, canShortlist: true, canReviewJob: true },
 };
+
+/** Overwrites the role-defaults table with the real one from the backend. */
+export function setRoleDefaults(defaults: Record<AdminRole, Partial<PermissionOverride>>) {
+  ROLE_DEFAULTS = defaults;
+}
 
 export function canAccess(role: AdminRole | undefined, perm: keyof PermissionOverride, overrides?: PermissionOverride[]): boolean {
   if (!role) return false;
@@ -134,6 +168,12 @@ export function canAccess(role: AdminRole | undefined, perm: keyof PermissionOve
 
 // ─── Job / Application ────────────────────────────────────────────────────────
 
+export type JobStatus = "draft" | "pending_review" | "pending_approval" | "published" | "declined";
+export const JOB_STATUS_LABELS: Record<JobStatus, string> = {
+  draft: "Draft", pending_review: "Pending Review", pending_approval: "Pending Approval",
+  published: "Published", declined: "Declined",
+};
+
 export type Job = {
   id: number; abbr: string; title: string; dept: string; deptKey: string;
   location: string; salary: string; salaryBand: string;
@@ -141,6 +181,7 @@ export type Job = {
   closes: string; closesAt: string; visibility: Visibility;
   minAge: number; requiredExperience: number; requiredQualification: QualLevel;
   description?: string; featured?: boolean;
+  status?: JobStatus; departmentId?: number | null; declineReason?: string | null;
 };
 
 export type Application = {
@@ -291,9 +332,13 @@ type Ctx = {
   pushToast: (t: Omit<Toast, "id">) => void;
   dismissToast: (id: number) => void;
   jobs: Job[];
-  addJob: (j: Omit<Job, "id" | "abbr">) => Job;
-  updateJob: (id: number, patch: Partial<Job>) => void;
-  deleteJob: (id: number) => void;
+  addJob: (j: Omit<Job, "id" | "abbr">) => Promise<Job>;
+  updateJob: (id: number, patch: Partial<Job>) => Promise<void>;
+  deleteJob: (id: number) => Promise<void>;
+  submitJobForReview: (id: number) => Promise<void>;
+  reviewJob: (id: number, approve: boolean, reason?: string) => Promise<void>;
+  approveJob: (id: number, approve: boolean, reason?: string) => Promise<void>;
+  publishJobDirect: (id: number) => Promise<void>;
   canSeeJob: (j: Job) => boolean;
   isExpired: (j: Job) => boolean;
   applications: Application[];
@@ -718,6 +763,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
         appsApi.list().then(r => { if (r.success) persistApps(r.data as unknown as Application[]); }).catch(() => {}),
         settingsApi.get().then(r => { if (r.success) setSettings(prev => ({ ...prev, ...(r.data as unknown as AdminSettings) })); }).catch(() => {}),
         notifApi.list().then(r => { if (r.success) persistNotifs(r.data as unknown as Notification[]); }).catch(() => {}),
+        // Role-defaults are fetched for every login (harmless, small payload)
+        // so the frontend never has to hardcode its own copy of them.
+        permissionsApi.roleDefaults().then(r => { if (r.success) setRoleDefaults(r.data.defaults as Record<AdminRole, Partial<PermissionOverride>>); }).catch(() => {}),
+        permissionsApi.list().then(r => {
+          if (r.success) {
+            const data = r.data as unknown as PermissionOverride[];
+            setPermissionOverrides(data);
+            try { localStorage.setItem(PERMS_KEY, JSON.stringify(data)); } catch {}
+          }
+        }).catch(() => {}),
         cvApi.get().then(r => {
           if (r.success && r.data.photoFile) {
             const photoUrl = r.data.photoFile;
@@ -872,15 +927,45 @@ export function AppProvider({ children }: { children: ReactNode }) {
     appsApi.bulkStatus(updates.map((u) => ({ id: u.id, status: u.status }))).catch(() => {});
   };
 
-  const addJob: Ctx["addJob"] = (j) => {
-    const id = Math.max(0, ...jobs.map((x) => x.id)) + 1;
-    const abbr = j.title.split(/\s+/).slice(0, 1).map((w) => w.slice(0, 3).toUpperCase()).join("");
-    const created: Job = { ...j, id, abbr };
+  // These previously only ever touched local state/localStorage and never
+  // called the backend — meaning no job created through the admin UI had
+  // ever actually reached the `jobs` table. Fixed to call the real API and
+  // reconcile local state from its response (real id, real status).
+  const addJob: Ctx["addJob"] = async (j) => {
+    const res = await jobsApi.create(j);
+    const created = res.data as unknown as Job;
     persistJobs([created, ...jobs]);
     return created;
   };
-  const updateJob: Ctx["updateJob"] = (id, patch) => persistJobs(jobs.map((j) => (j.id === id ? { ...j, ...patch } : j)));
-  const deleteJob: Ctx["deleteJob"] = (id) => persistJobs(jobs.filter((j) => j.id !== id));
+  const updateJob: Ctx["updateJob"] = async (id, patch) => {
+    const res = await jobsApi.update(id, patch);
+    const updated = res.data as unknown as Job;
+    persistJobs(jobs.map((j) => (j.id === id ? updated : j)));
+  };
+  const deleteJob: Ctx["deleteJob"] = async (id) => {
+    await jobsApi.delete(id);
+    persistJobs(jobs.filter((j) => j.id !== id));
+  };
+
+  // Job-approval workflow transitions — each reconciles local state from the
+  // backend's response so the status badge/action buttons update immediately.
+  const reconcileJob = (updated: Job) => persistJobs(jobs.map((j) => (j.id === updated.id ? updated : j)));
+  const submitJobForReview: Ctx["submitJobForReview"] = async (id) => {
+    const res = await jobsApi.submitForReview(id);
+    reconcileJob(res.data as unknown as Job);
+  };
+  const reviewJob: Ctx["reviewJob"] = async (id, approve, reason) => {
+    const res = await jobsApi.review(id, approve, reason);
+    reconcileJob(res.data as unknown as Job);
+  };
+  const approveJob: Ctx["approveJob"] = async (id, approve, reason) => {
+    const res = await jobsApi.approve(id, approve, reason);
+    reconcileJob(res.data as unknown as Job);
+  };
+  const publishJobDirect: Ctx["publishJobDirect"] = async (id) => {
+    const res = await jobsApi.publishDirect(id);
+    reconcileJob(res.data as unknown as Job);
+  };
 
   const isExpired: Ctx["isExpired"] = (j) => new Date(j.closesAt).getTime() < Date.now();
   const canSeeJob: Ctx["canSeeJob"] = (j) => {
@@ -981,6 +1066,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const next = [...permissionOverrides.filter((x) => x.email !== p.email), p];
     setPermissionOverrides(next);
     try { localStorage.setItem(PERMS_KEY, JSON.stringify(next)); } catch {}
+    // Previously local-only — the backend permission_overrides row never
+    // changed, so overrides granted here never actually affected what the
+    // backend's requirePerm() middleware allowed that user to do.
+    permissionsApi.save(p).catch((err) => {
+      pushToast({ type: "warning", title: "Permissions not saved to server", message: err instanceof Error ? err.message : "Please check your connection and try again." });
+    });
   };
 
   const logEmail: Ctx["logEmail"] = (e) => {
@@ -1022,7 +1113,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       value={{
         auth, isLoading, sessionRestoring, apiSignIn, apiRegister, signIn, signOut, updateProfile, updatePhotoUrl, markEmailVerified,
         toasts, pushToast, dismissToast,
-        jobs, addJob, updateJob, deleteJob, canSeeJob, isExpired,
+        jobs, addJob, updateJob, deleteJob, submitJobForReview, reviewJob, approveJob, publishJobDirect, canSeeJob, isExpired,
         applications, withdrawApplication, addApplication, updateApplicationStatus, bulkUpdateApplicationStatus,
         signInPromptOpen,
         openSignInPrompt: () => setSignInPromptOpen(true),

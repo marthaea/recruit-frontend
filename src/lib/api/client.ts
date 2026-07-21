@@ -152,6 +152,11 @@ export const jobs = {
   create: (data: Partial<Job>) => post<ApiResponse<Job>>("/jobs", data),
   update: (id: number, data: Partial<Job>) => put<ApiResponse<Job>>(`/jobs/${id}`, data),
   delete: (id: number) => del<ApiResponse<{ message: string }>>(`/jobs/${id}`),
+  // Job-approval workflow
+  submitForReview: (id: number) => put<ApiResponse<Job>>(`/jobs/${id}/submit-for-review`, {}),
+  review: (id: number, approve: boolean, reason?: string) => put<ApiResponse<Job>>(`/jobs/${id}/review`, { approve, reason }),
+  approve: (id: number, approve: boolean, reason?: string) => put<ApiResponse<Job>>(`/jobs/${id}/approve`, { approve, reason }),
+  publishDirect: (id: number) => put<ApiResponse<Job>>(`/jobs/${id}/publish`, {}),
 };
 
 // ── Applications ──────────────────────────────────────────────────────────────
@@ -290,13 +295,30 @@ export interface Department {
 export const departments = {
   list: () => get<ListResponse<Department>>("/departments"),
   create: (data: { name: string; code: string }) => post<ApiResponse<Department>>("/departments", data),
+  assignHead: (id: number, headUserId: number | null) => put<ApiResponse<Department>>(`/departments/${id}`, { headUserId }),
+};
+
+// ── Admin users (Administration section) ───────────────────────────────────────
+export interface AdminUser {
+  id: number;
+  email: string;
+  firstName: string;
+  lastName: string;
+  adminRole: string;
+  isActive: boolean;
+}
+
+export const adminUsers = {
+  list: () => get<ListResponse<AdminUser>>("/users/admin"),
+  create: (data: { email: string; password: string; firstName: string; lastName: string; adminRole: string }) =>
+    post<ApiResponse<AdminUser>>("/users/admin", data),
 };
 
 // ── Permissions ───────────────────────────────────────────────────────────────
 export const permissions = {
-  get: (adminId: number) => get<ApiResponse<PermissionOverride>>(`/permissions/${adminId}`),
-  set: (adminId: number, data: Partial<PermissionOverride>) =>
-    put<ApiResponse<PermissionOverride>>(`/permissions/${adminId}`, data),
+  list: () => get<ListResponse<PermissionOverride>>("/permissions"),
+  save: (data: PermissionOverride) => put<ApiResponse<PermissionOverride>>("/permissions", data),
+  roleDefaults: () => get<ApiResponse<{ roles: string[]; defaults: Record<string, Partial<PermissionOverride>> }>>("/permissions/roles/defaults"),
 };
 
 // ── Staff ─────────────────────────────────────────────────────────────────────
@@ -393,6 +415,8 @@ export interface PermissionOverride {
   canSendNotifications: boolean; canManageJobs: boolean; canManageCriteria: boolean;
   canViewStaff: boolean; canExport: boolean; canViewAudit: boolean;
   canManageSettings: boolean; canGrantPermissions: boolean;
+  canReviewJob: boolean; canApproveJob: boolean; canManageDepartments: boolean;
+  canManageAdmins: boolean; canAssignRights: boolean;
 }
 
 export interface StaffMember {

@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
 import {
-  Plus, Trash2, Pencil, AlertCircle, FileDown, RefreshCw, CheckCircle2, Upload, FileSearch,
+  Plus, Trash2, Pencil, AlertCircle, FileDown, RefreshCw, CheckCircle2, Upload, FileSearch, Send, ThumbsUp, ThumbsDown, Zap,
 } from "lucide-react";
 import {
-  useApp, type Job, type Visibility, type QualLevel, type Application,
+  useApp, type Job, type JobStatus, type Visibility, type QualLevel, type Application, JOB_STATUS_LABELS,
 } from "@/context/AppContext";
 import { SALARY_BANDS, EMPLOYMENT_TYPES, DEPARTMENTS, QUAL_LEVELS } from "@/lib/uganda-curriculum";
 import {
@@ -92,23 +92,42 @@ function parseJobFromText(text: string): Partial<Omit<Job, "id" | "abbr">> {
   return result;
 }
 
-export function JobsTab({ jobs, applications, isExpired, addJob, updateJob, deleteJob, onViewApps }: any) {
+const STATUS_STYLES: Record<JobStatus, string> = {
+  draft: "bg-caa-muted/15 text-caa-muted",
+  pending_review: "bg-amber-100 text-amber-700",
+  pending_approval: "bg-purple-100 text-purple-700",
+  published: "bg-caa-success/10 text-caa-success",
+  declined: "bg-caa-danger/10 text-caa-danger",
+};
+
+export function JobsTab({ jobs, applications, isExpired, addJob, updateJob, deleteJob, onViewApps, viewMode = "create" }: any) {
   type EditingJob = Omit<Job, "id" | "abbr"> & { id?: number };
   const [editing, setEditing] = useState<null | EditingJob>(null);
   const [inputMode, setInputMode] = useState<"manual" | "pdf">("manual");
   const [pdfParsing, setPdfParsing] = useState(false);
   const [pdfFileName, setPdfFileName] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const { auth, pushToast, departments, loadDepartments } = useApp();
+  const [saving, setSaving] = useState(false);
+  const [decliningId, setDecliningId] = useState<number | null>(null);
+  const [declineReason, setDeclineReason] = useState("");
+  const { auth, pushToast, departments, loadDepartments, submitJobForReview, reviewJob, approveJob, publishJobDirect } = useApp();
   const actor = `${auth.firstName} ${auth.lastName}`;
+  const isSuper = auth.adminRole === "super";
 
   useEffect(() => { loadDepartments(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Prefer the real, admin-managed department list; fall back to the static
   // one while it's loading so the form isn't blocked on first paint.
   const deptOptions = departments.length > 0
-    ? departments.map((d) => ({ key: d.code, label: d.name }))
-    : DEPARTMENTS;
+    ? departments.map((d) => ({ key: d.code, label: d.name, id: d.id }))
+    : DEPARTMENTS.map((d) => ({ ...d, id: undefined as number | undefined }));
+
+  // "Review" and "Approve & Publish" are read-only pipeline views scoped to
+  // the jobs actually awaiting that stage — everything else (create/edit/
+  // delete) stays on the default "create" view.
+  const visibleJobs = viewMode === "review" ? jobs.filter((j: Job) => j.status === "pending_review")
+    : viewMode === "approve" ? jobs.filter((j: Job) => j.status === "pending_approval")
+    : jobs;
 
   const open = (j?: Job) => {
     setEditing(j ? { ...j } : { ...emptyJob });
@@ -117,7 +136,7 @@ export function JobsTab({ jobs, applications, isExpired, addJob, updateJob, dele
     setSaveError(null);
   };
 
-  const save = () => {
+  const save = async () => {
     if (!editing) return;
     if (!editing.title.trim()) {
       setSaveError("Job title is required.");
@@ -132,9 +151,63 @@ export function JobsTab({ jobs, applications, isExpired, addJob, updateJob, dele
     setSaveError(null);
     const closes = new Date(editing.closesAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
     const payload = { ...editing, closes };
-    if (editing.id) updateJob(editing.id, payload); else addJob(payload);
-    setEditing(null);
-    pushToast({ type: "success", title: editing.id ? "Listing updated" : "Listing created", message: editing.title });
+    setSaving(true);
+    try {
+      if (editing.id) await updateJob(editing.id, payload); else await addJob(payload);
+      setEditing(null);
+      pushToast({ type: "success", title: editing.id ? "Listing updated" : "Listing created (draft)", message: editing.title });
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Could not save this listing. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const del = async (j: Job) => {
+    try {
+      await deleteJob(j.id);
+      pushToast({ type: "success", title: "Listing deleted", message: j.title });
+    } catch (err) {
+      pushToast({ type: "warning", title: "Could not delete listing", message: err instanceof Error ? err.message : "Please try again." });
+    }
+  };
+
+  const submitForReview = async (j: Job) => {
+    try {
+      await submitJobForReview(j.id);
+      pushToast({ type: "success", title: "Submitted for department review", message: j.title });
+    } catch (err) {
+      pushToast({ type: "warning", title: "Could not submit for review", message: err instanceof Error ? err.message : "Please try again." });
+    }
+  };
+
+  const doReview = async (j: Job, approve: boolean) => {
+    try {
+      await reviewJob(j.id, approve, approve ? undefined : declineReason);
+      pushToast({ type: "success", title: approve ? "Approved — sent for final approval" : "Sent back to draft", message: j.title });
+      setDecliningId(null); setDeclineReason("");
+    } catch (err) {
+      pushToast({ type: "warning", title: "Could not record review", message: err instanceof Error ? err.message : "Please try again." });
+    }
+  };
+
+  const doApprove = async (j: Job, approve: boolean) => {
+    try {
+      await approveJob(j.id, approve, approve ? undefined : declineReason);
+      pushToast({ type: "success", title: approve ? "Approved and published" : "Sent back to draft", message: j.title });
+      setDecliningId(null); setDeclineReason("");
+    } catch (err) {
+      pushToast({ type: "warning", title: "Could not record approval", message: err instanceof Error ? err.message : "Please try again." });
+    }
+  };
+
+  const doPublishDirect = async (j: Job) => {
+    try {
+      await publishJobDirect(j.id);
+      pushToast({ type: "success", title: "Published directly", message: j.title });
+    } catch (err) {
+      pushToast({ type: "warning", title: "Could not publish", message: err instanceof Error ? err.message : "Please try again." });
+    }
   };
 
   const handlePdfUpload = async (file: File) => {
@@ -154,16 +227,23 @@ export function JobsTab({ jobs, applications, isExpired, addJob, updateJob, dele
     }
   };
 
+  const heading = viewMode === "review" ? "Review Job Listings" : viewMode === "approve" ? "Approve & Publish" : "Job Listings";
+  const emptyHint = viewMode === "review" ? "No job listings are currently awaiting your department review."
+    : viewMode === "approve" ? "No job listings are currently awaiting final approval."
+    : "No job listings yet.";
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h1 className="font-bold text-xl text-caa-body">Job Listings</h1>
-        <button onClick={() => open()} className="px-3 py-1.5 text-sm bg-caa-navy text-white rounded-md hover:bg-caa-navy-2 inline-flex items-center gap-1">
-          <Plus className="h-4 w-4" /> New listing
-        </button>
+        <h1 className="font-bold text-xl text-caa-body">{heading}</h1>
+        {viewMode === "create" && (
+          <button onClick={() => open()} className="px-3 py-1.5 text-sm bg-caa-navy text-white rounded-md hover:bg-caa-navy-2 inline-flex items-center gap-1">
+            <Plus className="h-4 w-4" /> New listing
+          </button>
+        )}
       </div>
       <div className="caa-card overflow-x-auto">
-        <table className="w-full min-w-[640px] text-sm">
+        <table className="w-full min-w-[720px] text-sm">
           <thead className="bg-caa-surface text-xs text-caa-muted">
             <tr>
               <th className="text-left p-3">Title</th>
@@ -171,16 +251,21 @@ export function JobsTab({ jobs, applications, isExpired, addJob, updateJob, dele
               <th className="text-left p-3">Band</th>
               <th className="text-left p-3">Closes</th>
               <th className="text-left p-3">Status</th>
-              <th className="text-left p-3">Applicants</th>
+              {viewMode === "create" && <th className="text-left p-3">Applicants</th>}
               <th className="text-right p-3">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-caa-border">
-            {jobs.map((j: Job) => (
+            {visibleJobs.map((j: Job) => {
+              const status: JobStatus = j.status ?? "published";
+              return (
               <tr key={j.id}>
                 <td className="p-3">
                   <p className="font-medium text-caa-body">{j.title}</p>
                   <p className="text-[11px] text-caa-muted">{j.dept}</p>
+                  {status === "declined" && j.declineReason && (
+                    <p className="text-[11px] text-caa-danger mt-0.5">Declined: {j.declineReason}</p>
+                  )}
                 </td>
                 <td className="p-3">
                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${j.visibility === "internal" ? "bg-caa-navy-2/15 text-caa-navy-2" : "bg-caa-success/10 text-caa-success"}`}>
@@ -190,23 +275,72 @@ export function JobsTab({ jobs, applications, isExpired, addJob, updateJob, dele
                 <td className="p-3 text-xs">{j.salaryBand}</td>
                 <td className="p-3 text-xs">{j.closes}</td>
                 <td className="p-3">
-                  {isExpired(j)
-                    ? <span className="px-2 py-0.5 rounded-full bg-caa-danger/10 text-caa-danger text-[10px]">Expired</span>
-                    : <span className="px-2 py-0.5 rounded-full bg-caa-success/10 text-caa-success text-[10px]">Active</span>}
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${STATUS_STYLES[status]}`}>{JOB_STATUS_LABELS[status]}</span>
+                  {status === "published" && isExpired(j) && (
+                    <span className="ml-1 px-2 py-0.5 rounded-full bg-caa-danger/10 text-caa-danger text-[10px]">Expired</span>
+                  )}
                 </td>
-                <td className="p-3">
-                  <button onClick={() => onViewApps(j.id)} className="text-xs font-semibold text-caa-navy hover:underline">
-                    {(applications ?? []).filter((a: Application) => a.jobId === j.id).length}
-                  </button>
-                </td>
-                <td className="p-3 text-right space-x-2">
-                  <button onClick={() => onViewApps(j.id)} className="text-xs text-caa-navy hover:underline">Apps</button>
-                  <button onClick={() => open(j)} className="text-xs text-caa-navy hover:underline inline-flex items-center gap-1"><Pencil className="h-3 w-3" />Edit</button>
-                  <button onClick={() => downloadJobAdvert(j, actor)} className="text-xs text-caa-navy hover:underline inline-flex items-center gap-1"><FileDown className="h-3 w-3" />PDF</button>
-                  <button onClick={() => deleteJob(j.id)} className="text-xs text-caa-danger hover:underline inline-flex items-center gap-1"><Trash2 className="h-3 w-3" />Del</button>
+                {viewMode === "create" && (
+                  <td className="p-3">
+                    <button onClick={() => onViewApps(j.id)} className="text-xs font-semibold text-caa-navy hover:underline">
+                      {(applications ?? []).filter((a: Application) => a.jobId === j.id).length}
+                    </button>
+                  </td>
+                )}
+                <td className="p-3 text-right">
+                  <div className="flex justify-end items-center gap-2 flex-wrap">
+                    {viewMode === "create" && (
+                      <>
+                        <button onClick={() => onViewApps(j.id)} className="text-xs text-caa-navy hover:underline">Apps</button>
+                        <button onClick={() => open(j)} className="text-xs text-caa-navy hover:underline inline-flex items-center gap-1"><Pencil className="h-3 w-3" />Edit</button>
+                        <button onClick={() => downloadJobAdvert(j, actor)} className="text-xs text-caa-navy hover:underline inline-flex items-center gap-1"><FileDown className="h-3 w-3" />PDF</button>
+                        <button onClick={() => del(j)} className="text-xs text-caa-danger hover:underline inline-flex items-center gap-1"><Trash2 className="h-3 w-3" />Del</button>
+                        {(status === "draft" || status === "declined") && (
+                          <button onClick={() => submitForReview(j)} className="text-xs text-white bg-caa-navy px-2 py-1 rounded-md hover:bg-caa-navy-2 inline-flex items-center gap-1"><Send className="h-3 w-3" />Submit for Review</button>
+                        )}
+                      </>
+                    )}
+                    {viewMode === "review" && (
+                      <>
+                        <button onClick={() => doReview(j, true)} className="text-xs text-white bg-caa-success px-2 py-1 rounded-md hover:opacity-90 inline-flex items-center gap-1"><ThumbsUp className="h-3 w-3" />Approve</button>
+                        <button onClick={() => setDecliningId(decliningId === j.id ? null : j.id)} className="text-xs text-white bg-caa-danger px-2 py-1 rounded-md hover:opacity-90 inline-flex items-center gap-1"><ThumbsDown className="h-3 w-3" />Decline</button>
+                      </>
+                    )}
+                    {viewMode === "approve" && (
+                      <>
+                        <button onClick={() => doApprove(j, true)} className="text-xs text-white bg-caa-success px-2 py-1 rounded-md hover:opacity-90 inline-flex items-center gap-1"><ThumbsUp className="h-3 w-3" />Approve &amp; Publish</button>
+                        <button onClick={() => setDecliningId(decliningId === j.id ? null : j.id)} className="text-xs text-white bg-caa-danger px-2 py-1 rounded-md hover:opacity-90 inline-flex items-center gap-1"><ThumbsDown className="h-3 w-3" />Decline</button>
+                      </>
+                    )}
+                    {isSuper && status !== "published" && viewMode === "create" && (
+                      <button onClick={() => doPublishDirect(j)} className="text-xs text-white bg-purple-600 px-2 py-1 rounded-md hover:opacity-90 inline-flex items-center gap-1"><Zap className="h-3 w-3" />Publish now</button>
+                    )}
+                  </div>
+                  {decliningId === j.id && (
+                    <div className="mt-2 flex items-center gap-2 justify-end">
+                      <input
+                        autoFocus
+                        className="text-xs px-2 py-1 border border-caa-border rounded-md w-56"
+                        placeholder="Reason for declining…"
+                        value={declineReason}
+                        onChange={(e) => setDeclineReason(e.target.value)}
+                      />
+                      <button
+                        onClick={() => (viewMode === "review" ? doReview(j, false) : doApprove(j, false))}
+                        disabled={!declineReason.trim()}
+                        className="text-xs px-2 py-1 bg-caa-danger text-white rounded-md disabled:opacity-50"
+                      >
+                        Confirm decline
+                      </button>
+                    </div>
+                  )}
                 </td>
               </tr>
-            ))}
+              );
+            })}
+            {visibleJobs.length === 0 && (
+              <tr><td colSpan={viewMode === "create" ? 7 : 6} className="p-6 text-center text-xs text-caa-muted">{emptyHint}</td></tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -269,7 +403,7 @@ export function JobsTab({ jobs, applications, isExpired, addJob, updateJob, dele
               /* ── Manual form ── */
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Field label="Title"><input className={fi} value={editing.title} onChange={(e) => setEditing({ ...editing, title: e.target.value })} placeholder="e.g. Senior Air Traffic Controller" /></Field>
-                <Field label="Department"><select className={fi} value={editing.deptKey} onChange={(e) => { const d = deptOptions.find((x) => x.key === e.target.value)!; setEditing({ ...editing, deptKey: d.key, dept: d.label }); }}>{deptOptions.map((d) => <option key={d.key} value={d.key}>{d.label}</option>)}</select></Field>
+                <Field label="Department"><select className={fi} value={editing.deptKey} onChange={(e) => { const d = deptOptions.find((x) => x.key === e.target.value)!; setEditing({ ...editing, deptKey: d.key, dept: d.label, departmentId: d.id ?? editing.departmentId }); }}>{deptOptions.map((d) => <option key={d.key} value={d.key}>{d.label}</option>)}</select></Field>
                 <Field label="Location"><input className={fi} value={editing.location} onChange={(e) => setEditing({ ...editing, location: e.target.value })} /></Field>
                 <Field label="Type"><select className={fi} value={editing.type} onChange={(e) => setEditing({ ...editing, type: e.target.value as any })}>{EMPLOYMENT_TYPES.map((t) => <option key={t}>{t}</option>)}</select></Field>
                 <Field label="Salary range"><input className={fi} value={editing.salary} onChange={(e) => setEditing({ ...editing, salary: e.target.value })} placeholder="e.g. UGX 3.2M–5.8M" /></Field>
@@ -310,8 +444,8 @@ export function JobsTab({ jobs, applications, isExpired, addJob, updateJob, dele
               </div>
               <div className="flex gap-2">
                 <button onClick={() => setEditing(null)} className="px-3 py-1.5 text-sm border border-caa-border rounded-md">Cancel</button>
-                <button onClick={save} disabled={pdfParsing} className="px-3 py-1.5 text-sm bg-caa-navy text-white rounded-md disabled:opacity-50">
-                  {editing.id ? "Save changes" : "Create listing"}
+                <button onClick={save} disabled={pdfParsing || saving} className="px-3 py-1.5 text-sm bg-caa-navy text-white rounded-md disabled:opacity-50">
+                  {saving ? "Saving…" : editing.id ? "Save changes" : "Create listing"}
                 </button>
               </div>
             </div>
