@@ -279,6 +279,19 @@ export const criteria = {
     put<ApiResponse<JobCriteria>>(`/criteria/${jobId}`, data),
 };
 
+// ── Departments ───────────────────────────────────────────────────────────────
+export interface Department {
+  id: number;
+  name: string;
+  code: string;
+  headUserId: number | null;
+}
+
+export const departments = {
+  list: () => get<ListResponse<Department>>("/departments"),
+  create: (data: { name: string; code: string }) => post<ApiResponse<Department>>("/departments", data),
+};
+
 // ── Permissions ───────────────────────────────────────────────────────────────
 export const permissions = {
   get: (adminId: number) => get<ApiResponse<PermissionOverride>>(`/permissions/${adminId}`),

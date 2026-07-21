@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { z } from "zod";
 import { ChevronLeft, ChevronRight, Plus, Trash2, Check, AlertCircle, Pencil, Upload } from "lucide-react";
 import { useApp, EMPTY_CV, screeningAnswerPasses, type CvProfile, type CvQualification, type QualLevel, type ScreeningQuestion } from "@/context/AppContext";
 import { SuccessModal } from "@/components/SuccessModal";
 import { O_LEVEL_SUBJECTS, A_LEVEL_SUBJECTS, O_LEVEL_GRADES, A_LEVEL_GRADES, QUAL_LEVELS, UGANDAN_UNIVERSITIES, COMMON_COURSES } from "@/lib/uganda-curriculum";
 import { extractPdfText } from "@/lib/pdf-extract";
+import { computeCvCompletion } from "@/lib/cv-completion";
+import { isValidEmail, isValidPhone, isFullName } from "@/lib/validators";
 
 export const Route = createFileRoute("/apply")({
   validateSearch: z.object({ jobId: z.coerce.number().optional() }),
@@ -17,7 +19,8 @@ function input(cls = "") { return "w-full px-2.5 py-1.5 text-sm border border-ca
 const label = "block text-xs font-medium text-caa-body mb-1";
 
 function ApplyPage() {
-  const { auth, sessionRestoring, openSignInPrompt, jobs, cv, hasCv, saveCv, addApplication, updateApplicationStatus, criteria, pushToast } = useApp();
+  const { auth, sessionRestoring, openSignInPrompt, jobs, applications, cv, hasCv, saveCv, addApplication, updateApplicationStatus, criteria, pushToast } = useApp();
+  const hasExistingApplication = applications.some((a) => a.candidateEmail === auth.email);
   const { jobId } = Route.useSearch();
   const navigate = useNavigate();
   const job = jobs.find((j) => j.id === jobId) ?? jobs[0];
@@ -79,31 +82,58 @@ function ApplyPage() {
   const next = () => setStep((s) => Math.min(s + 1, STEPS.length - 1));
   const back = () => setStep((s) => Math.max(s - 1, 0));
 
-  /* ---------- required-field validation ---------- */
-  const getMissingFields = (): { label: string; step: number }[] => {
+  /* ---------- required-field validation ----------
+     Pass a step index to get only that step's issues (used to gate
+     "Continue" so a candidate can't advance past incomplete/invalid fields);
+     call with no argument for the full list (used on the Review step and at
+     final submit). */
+  const getMissingFields = (forStep?: number): { label: string; step: number }[] => {
     const missing: { label: string; step: number }[] = [];
     const stepIndex = (l: string) => stepDefs.findIndex((d) => d.label === l);
+    const add = (fieldLabel: string, step: number) => {
+      if (forStep === undefined || forStep === step) missing.push({ label: fieldLabel, step });
+    };
+
     const p = data.personal;
-    if (!p.firstName.trim()) missing.push({ label: "First name", step: stepIndex("Personal") });
-    if (!p.lastName.trim()) missing.push({ label: "Surname", step: stepIndex("Personal") });
-    if (!p.phone.trim()) missing.push({ label: "Phone", step: stepIndex("Personal") });
-    if (!p.email.trim()) missing.push({ label: "Email", step: stepIndex("Personal") });
-    if (!p.dob) missing.push({ label: "Date of birth", step: stepIndex("Personal") });
-    if (!p.gender) missing.push({ label: "Gender", step: stepIndex("Personal") });
-    if (!p.nationality.trim()) missing.push({ label: "Nationality", step: stepIndex("Personal") });
-    if (!p.address.trim()) missing.push({ label: "Address", step: stepIndex("Personal") });
+    const personalStep = stepIndex("Personal");
+    if (!p.firstName.trim()) add("First name", personalStep);
+    if (!p.lastName.trim()) add("Surname", personalStep);
+    if (!p.phone.trim()) add("Phone", personalStep);
+    else if (!isValidPhone(p.phone)) add("Valid phone number (digits, optionally with a country code like +256)", personalStep);
+    if (!p.email.trim()) add("Email", personalStep);
+    else if (!isValidEmail(p.email)) add("Valid email address", personalStep);
+    if (!p.dob) add("Date of birth", personalStep);
+    if (!p.gender) add("Gender", personalStep);
+    if (!p.nationality.trim()) add("Nationality", personalStep);
+    if (!p.address.trim()) add("Address", personalStep);
+
     if (hasScreening) {
+      const eligibilityStep = stepIndex("Eligibility");
       const unanswered = screeningQs.some((q) => !screeningAnswers[q.id]);
-      if (unanswered) missing.push({ label: "Eligibility questions", step: stepIndex("Eligibility") });
+      if (unanswered) add("Eligibility questions", eligibilityStep);
     }
-    if (!data.highestLevel) missing.push({ label: "Highest level of education", step: stepIndex("Qualifications") });
-    if (data.qualifications.length === 0) missing.push({ label: "At least one qualification", step: stepIndex("Qualifications") });
+
+    const qualificationsStep = stepIndex("Qualifications");
+    if (!data.highestLevel) add("Highest level of education", qualificationsStep);
+    if (data.qualifications.length === 0) add("At least one qualification", qualificationsStep);
+
+    const refereesStep = stepIndex("Referees");
     const validReferees = data.referees.filter((r) => r.name.trim() && r.phone.trim() && r.email.trim());
-    if (validReferees.length < 2) missing.push({ label: "Two complete referees (name, phone, email)", step: stepIndex("Referees") });
-    if (!data.nextOfKin.name.trim()) missing.push({ label: "Next of kin name", step: stepIndex("Next of Kin") });
-    if (!data.nextOfKin.relationship) missing.push({ label: "Next of kin relationship", step: stepIndex("Next of Kin") });
-    if (!data.nextOfKin.phone.trim()) missing.push({ label: "Next of kin phone", step: stepIndex("Next of Kin") });
-    if (!data.photoFile) missing.push({ label: "Passport photo", step: stepIndex("Passport Photo") });
+    if (validReferees.length < 2) add("Two complete referees (name, phone, email)", refereesStep);
+    if (data.referees.some((r) => r.name.trim() && !isFullName(r.name))) add("Referee full name (first and last, not just one name)", refereesStep);
+    if (data.referees.some((r) => r.email.trim() && !isValidEmail(r.email))) add("Valid referee email address", refereesStep);
+    if (data.referees.some((r) => r.phone.trim() && !isValidPhone(r.phone))) add("Valid referee phone number", refereesStep);
+
+    const nextOfKinStep = stepIndex("Next of Kin");
+    if (!data.nextOfKin.name.trim()) add("Next of kin name", nextOfKinStep);
+    else if (!isFullName(data.nextOfKin.name)) add("Next of kin full name (first and last, not just one name)", nextOfKinStep);
+    if (!data.nextOfKin.relationship) add("Next of kin relationship", nextOfKinStep);
+    if (!data.nextOfKin.phone.trim()) add("Next of kin phone", nextOfKinStep);
+    else if (!isValidPhone(data.nextOfKin.phone)) add("Valid next of kin phone number", nextOfKinStep);
+
+    const photoStep = stepIndex("Passport Photo");
+    if (!data.photoFile) add("Passport photo", photoStep);
+
     return missing;
   };
 
@@ -118,7 +148,8 @@ function ApplyPage() {
     saveCv(data);
     const ref = "REF-2026-" + String(Math.floor(Math.random() * 100000)).padStart(5, "0");
     const newApp = addApplication({
-      abbr: job.abbr, title: job.title, dept: job.dept, jobId: job.id, completion: 100,
+      abbr: job.abbr, title: job.title, dept: job.dept, jobId: job.id,
+      completion: computeCvCompletion(data, auth.photoUrl),
       candidateEmail: auth.email, candidateName: `${data.personal.firstName} ${data.personal.lastName}`.trim(),
       screeningAnswers: hasScreening ? screeningAnswers : undefined,
     });
@@ -130,6 +161,13 @@ function ApplyPage() {
     }
     setSubmitted(ref);
     pushToast({ type: "success", title: "Application submitted", message: "Your CV is saved and will pre-fill next time." });
+  };
+
+  // Save CV changes without submitting a new application — for a candidate
+  // who's just updating their profile (e.g. before applying elsewhere).
+  const saveOnly = () => {
+    saveCv(data);
+    pushToast({ type: "success", title: "CV saved", message: "Your changes have been saved to your profile." });
   };
 
   /* ---------- per-step pieces ---------- */
@@ -322,6 +360,9 @@ function ApplyPage() {
     <>
       <div className="caa-hero-bg py-8 px-4 sm:px-6">
         <div className="relative mx-auto max-w-5xl">
+          <Link to="/dashboard" className="text-white/65 hover:text-white text-xs inline-flex items-center gap-1.5 mb-3">
+            <ChevronLeft className="h-3.5 w-3.5" /> Back to dashboard
+          </Link>
           <p className="text-white/65 text-xs">Applying for</p>
           <h1 className="font-bold text-white text-2xl md:text-3xl mt-1">{job.title}</h1>
           <p className="text-white/70 text-xs mt-1">{job.dept} · {job.location} · {job.salaryBand} · Closes {job.closes}</p>
@@ -355,15 +396,32 @@ function ApplyPage() {
             <button onClick={back} disabled={step === 0} className="px-3 py-2 text-sm border border-caa-border rounded-md text-caa-body hover:bg-white disabled:opacity-40 inline-flex items-center gap-1">
               <ChevronLeft className="h-4 w-4" /> Back
             </button>
-            {step < STEPS.length - 1 ? (
-              <button onClick={next} className="px-4 py-2 text-sm bg-caa-navy text-white font-semibold rounded-md hover:bg-caa-navy-2 inline-flex items-center gap-1">
-                Continue <ChevronRight className="h-4 w-4" />
-              </button>
-            ) : (
-              <button onClick={submit} className="px-5 py-2 text-sm bg-caa-navy text-white font-semibold rounded-md hover:bg-caa-navy-2">
-                Submit application
-              </button>
-            )}
+            <div className="flex items-center gap-2">
+              {hasCv && (
+                <button onClick={saveOnly} className="px-4 py-2 text-sm border border-caa-navy text-caa-navy font-semibold rounded-md hover:bg-caa-navy/5">
+                  Save
+                </button>
+              )}
+              {step < STEPS.length - 1 ? (
+                <button
+                  onClick={() => {
+                    const stepMissing = getMissingFields(step);
+                    if (stepMissing.length > 0) {
+                      pushToast({ type: "warning", title: "Please complete this step", message: stepMissing.map((m) => m.label).join(", ") });
+                      return;
+                    }
+                    next();
+                  }}
+                  className="px-4 py-2 text-sm bg-caa-navy text-white font-semibold rounded-md hover:bg-caa-navy-2 inline-flex items-center gap-1"
+                >
+                  Continue <ChevronRight className="h-4 w-4" />
+                </button>
+              ) : (
+                <button onClick={submit} className="px-5 py-2 text-sm bg-caa-navy text-white font-semibold rounded-md hover:bg-caa-navy-2">
+                  {hasExistingApplication ? "Save and Reapply" : "Save and Apply"}
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -438,29 +496,30 @@ function QualificationsStep({ data, setData }: { data: CvProfile; setData: (d: C
 
       {data.qualifications.length === 0 && <p className="text-xs text-caa-muted">Add at least one qualification using the buttons above.</p>}
 
+      <div className="flex gap-4 overflow-x-auto pb-2">
       {data.qualifications.map((q, i) => {
         const isSecondary = q.level === "O-Level" || q.level === "A-Level";
         const subjectList = q.level === "O-Level" ? O_LEVEL_SUBJECTS : A_LEVEL_SUBJECTS;
         const grades = q.level === "O-Level" ? O_LEVEL_GRADES : A_LEVEL_GRADES;
         return (
-          <div key={i} className="border border-caa-border rounded-md p-3 space-y-3 bg-caa-surface/40">
+          <div key={i} className="shrink-0 w-[440px] border border-caa-border rounded-md p-3 space-y-3 bg-caa-surface/40">
             <div className="flex items-center justify-between">
               <p className="text-sm font-semibold text-caa-body">{q.level}</p>
               <button onClick={() => remove(i)} className="text-caa-danger text-xs inline-flex items-center gap-1"><Trash2 className="h-3 w-3" /> Remove</button>
             </div>
 
             {!isSecondary && (
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-                <div className="sm:col-span-2">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2">
                   <label className={label}>Course / programme</label>
                   <Combobox options={COMMON_COURSES} value={q.course} onChange={(v) => update(i, { course: v })} placeholder="Select course…" />
                 </div>
-                <div className="sm:col-span-2">
+                <div className="col-span-2">
                   <label className={label}>Institution / University</label>
                   <Combobox options={UGANDAN_UNIVERSITIES} value={q.institution} onChange={(v) => update(i, { institution: v })} placeholder="Select university…" />
                 </div>
-                <div><label className={label}>Year of award</label><input className={input()} value={q.year} onChange={(e) => update(i, { year: e.target.value })} placeholder="YYYY" /></div>
-                <div className="sm:col-span-3 grid grid-cols-2 gap-2">
+                <div><label className={label}>Year of award</label><input type="month" className={input()} value={q.year} onChange={(e) => update(i, { year: e.target.value })} /></div>
+                <div className="col-span-2 grid grid-cols-2 gap-2">
                   <FileField label="Proof of award" value={q.awardFile} onChange={(name) => update(i, { awardFile: name })} />
                   <FileField label="Full official transcript" value={q.transcriptFile} onChange={(name) => update(i, { transcriptFile: name })} />
                 </div>
@@ -469,10 +528,10 @@ function QualificationsStep({ data, setData }: { data: CvProfile; setData: (d: C
 
             {isSecondary && (
               <>
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-                  <div className="sm:col-span-2"><label className={label}>School</label><input className={input()} value={q.school ?? ""} onChange={(e) => update(i, { school: e.target.value })} /></div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="col-span-2"><label className={label}>School</label><input className={input()} value={q.school ?? ""} onChange={(e) => update(i, { school: e.target.value })} /></div>
                   <div><label className={label}>Index number</label><input className={input()} value={q.indexNumber ?? ""} onChange={(e) => update(i, { indexNumber: e.target.value })} /></div>
-                  <div><label className={label}>Year</label><input className={input()} value={q.year} onChange={(e) => update(i, { year: e.target.value })} placeholder="YYYY" /></div>
+                  <div><label className={label}>Year</label><input type="month" className={input()} value={q.year} onChange={(e) => update(i, { year: e.target.value })} /></div>
                   <div><label className={label}>Aggregate</label><input className={input()} value={q.aggregate ?? ""} onChange={(e) => update(i, { aggregate: e.target.value })} placeholder="e.g. 12" /></div>
                   <FileField label="Result slip" value={q.awardFile} onChange={(name) => update(i, { awardFile: name })} />
                 </div>
@@ -506,6 +565,7 @@ function QualificationsStep({ data, setData }: { data: CvProfile; setData: (d: C
           </div>
         );
       })}
+      </div>
     </div>
   );
 }

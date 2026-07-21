@@ -7,7 +7,7 @@ import {
   canAccess, type Job, type Application, type ApplicationStatus, type JobCriteria,
 } from "@/context/AppContext";
 import {
-  downloadScreeningReport, downloadOfferLetter, type ScreeningReportEntry,
+  downloadScreeningReport, downloadOfferLetter, downloadCandidateCv, type ScreeningReportEntry,
 } from "@/lib/admin-pdf";
 import { buildEmail, autoQualify, STATUS_COLORS, fi, EmptyState, type ScreeningResult } from "./shared";
 
@@ -594,6 +594,23 @@ function AppDetailModal({ app, job, cv, criteria, canShortlist, onClose, onUpdat
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* CV download — available whenever the candidate has a CV on file */}
+          {cv && (
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-caa-navy/5 border border-caa-navy/15">
+              <FileText className="h-5 w-5 text-caa-navy shrink-0" />
+              <div className="flex-1">
+                <p className="text-xs font-semibold text-caa-navy">Candidate CV</p>
+                <p className="text-[11px] text-caa-muted mt-0.5">Download this candidate's CV as a system-generated PDF.</p>
+              </div>
+              <button
+                onClick={() => downloadCandidateCv(cv, app, actor)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border border-caa-navy text-caa-navy rounded-md hover:bg-caa-navy/5 shrink-0"
+              >
+                <Download className="h-3.5 w-3.5" /> Download CV PDF
+              </button>
             </div>
           )}
 

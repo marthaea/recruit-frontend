@@ -88,6 +88,21 @@ export function downloadJobsReport(jobs: Job[], actor: string) {
   doc.save(`caa-vacancies-${Date.now()}.pdf`);
 }
 
+export function downloadJobRequirementsReport(jobs: Job[], actor: string) {
+  const doc = new jsPDF();
+  header(doc, "Job Requirement Report", `${jobs.length} listings as at ${new Date().toLocaleDateString()}`);
+  autoTable(doc, {
+    startY: 65,
+    head: [["Title", "Department", "Required Qualification", "Min Exp (yrs)", "Min Age", "Salary Band", "Salary Range", "Location"]],
+    body: jobs.map((j) => [j.title, j.dept, j.requiredQualification, j.requiredExperience, j.minAge, j.salaryBand, j.salary, j.location]),
+    headStyles: { fillColor: NAVY, textColor: 255, fontStyle: "bold" },
+    styles: { fontSize: 8, cellPadding: 2.5 },
+    alternateRowStyles: { fillColor: [245, 247, 250] },
+  });
+  footer(doc, actor);
+  doc.save(`caa-job-requirements-${Date.now()}.pdf`);
+}
+
 export function downloadApplicationsReport(apps: Application[], jobs: Job[], actor: string, title = "Applications Report") {
   const doc = new jsPDF();
   const byStatus: Record<string, number> = {};

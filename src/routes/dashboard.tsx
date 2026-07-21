@@ -1,10 +1,11 @@
 import { useEffect, useState, useCallback } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { Check, Circle, Bell, FileText, Eye, Users, Award, Mail, Pencil, X, UserCog, Download, Camera } from "lucide-react";
-import { useApp, canWithdraw, type Application } from "@/context/AppContext";
+import { useApp, canWithdraw, type Application, type CvProfile } from "@/context/AppContext";
 import { downloadApplicationSummary } from "@/lib/admin-pdf";
 import { PhotoCropModal } from "@/components/PhotoCropModal";
 import { cv as cvApi, applications as appsApi } from "@/lib/api/client";
+import { computeCvChecklist, computeCvCompletion } from "@/lib/cv-completion";
 
 export const Route = createFileRoute("/dashboard")({
   head: () => ({
@@ -183,25 +184,9 @@ function DashboardPage() {
   };
 
   // Real profile completeness, computed from the saved CV profile
-  const cvP = cvProfile as {
-    personal?: Record<string, string>;
-    qualifications?: unknown[];
-    experience?: unknown[];
-    skills?: unknown[];
-    referees?: { name?: string }[];
-    photoFile?: string;
-  } | null;
-  const filled = (s?: string) => !!s && s.trim() !== "";
-  const checklist = [
-    { label: "Personal information", done: !!cvP && filled(cvP.personal?.dob) && filled(cvP.personal?.nin) },
-    { label: "Contact details", done: !!cvP && filled(cvP.personal?.phone) && filled(cvP.personal?.address) },
-    { label: "Profile photo", done: !!auth.photoUrl || filled(cvP?.photoFile) },
-    { label: "Education history", done: (cvP?.qualifications?.length ?? 0) > 0 },
-    { label: "Work experience", done: (cvP?.experience?.length ?? 0) > 0 },
-    { label: "Skills", done: (cvP?.skills?.length ?? 0) > 0 },
-    { label: "Referee contacts", done: (cvP?.referees ?? []).filter((r) => filled(r?.name)).length >= 2 },
-  ];
-  const completionPct = Math.round((checklist.filter((c) => c.done).length / checklist.length) * 100);
+  const cvP = cvProfile as unknown as Partial<CvProfile> | null;
+  const checklist = computeCvChecklist(cvP, auth.photoUrl);
+  const completionPct = computeCvCompletion(cvP, auth.photoUrl);
   const nextMissing = checklist.find((c) => !c.done);
 
   return (

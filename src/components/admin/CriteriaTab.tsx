@@ -3,7 +3,7 @@ import {
   Trash2, CheckCircle2, XCircle,
 } from "lucide-react";
 import {
-  type Job, type QualLevel, type JobCriteria, type ScreeningQuestion,
+  type Job, type QualLevel, type JobCriteria, type ScreeningQuestion, type AssessmentType, ASSESSMENT_TYPES,
 } from "@/context/AppContext";
 import { QUAL_LEVELS } from "@/lib/uganda-curriculum";
 import { Field, Section, fi } from "./shared";
@@ -22,6 +22,7 @@ export function CriteriaTab({ jobs, criteria, saveCriteria, logAction }: { jobs:
     minExperienceYears: undefined,
     requiredQualLevel: undefined,
     disqualifyingUniversities: [],
+    assessmentTypes: [],
   });
 
   const fromExisting = (e: JobCriteria | undefined): Omit<JobCriteria, "jobId"> => ({
@@ -32,7 +33,16 @@ export function CriteriaTab({ jobs, criteria, saveCriteria, logAction }: { jobs:
     minExperienceYears: e?.minExperienceYears,
     requiredQualLevel: e?.requiredQualLevel,
     disqualifyingUniversities: e?.disqualifyingUniversities ?? [],
+    assessmentTypes: e?.assessmentTypes ?? [],
   });
+
+  const toggleAssessmentType = (t: AssessmentType) =>
+    setDraft((d) => ({
+      ...d,
+      assessmentTypes: (d.assessmentTypes ?? []).includes(t)
+        ? (d.assessmentTypes ?? []).filter((x) => x !== t)
+        : [...(d.assessmentTypes ?? []), t],
+    }));
 
   const [draft, setDraft] = useState<Omit<JobCriteria, "jobId">>(fromExisting(existing));
   const [kw, setKw] = useState("");
@@ -128,6 +138,17 @@ export function CriteriaTab({ jobs, criteria, saveCriteria, logAction }: { jobs:
               {QUAL_LEVELS.map((q) => <option key={q} value={q}>{q}</option>)}
             </select>
           </Field>
+          <div>
+            <label className="block text-xs font-medium text-caa-body mb-1">Assessment type</label>
+            <div className="flex flex-wrap gap-3">
+              {ASSESSMENT_TYPES.map((t) => (
+                <label key={t} className="inline-flex items-center gap-1.5 text-xs text-caa-body cursor-pointer">
+                  <input type="checkbox" checked={(draft.assessmentTypes ?? []).includes(t)} onChange={() => toggleAssessmentType(t)} />
+                  {t}
+                </label>
+              ))}
+            </div>
+          </div>
           <div>
             <label className="block text-xs font-medium text-caa-body mb-1">Required keywords (CV must contain all of these)</label>
             <div className="flex gap-2 mb-2">

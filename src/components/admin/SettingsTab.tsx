@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
-  Settings, RefreshCw, CheckCircle2,
+  Settings, RefreshCw, CheckCircle2, Plus,
 } from "lucide-react";
 import {
+  useApp,
   type Job, type AdminSettings, type PermissionOverride, type AdminRole,
 } from "@/context/AppContext";
 import { Field, Section, fi } from "./shared";
@@ -10,6 +11,30 @@ import { Field, Section, fi } from "./shared";
 export function SettingsTab({ settings, updateSettings, logAction }: { settings: AdminSettings; updateSettings: (p: Partial<AdminSettings>) => void; logAction: any }) {
   const [draft, setDraft] = useState<AdminSettings>({ ...settings });
   const [saved, setSaved] = useState(false);
+  const { departments, loadDepartments, addDepartment, pushToast } = useApp();
+  const [deptName, setDeptName] = useState("");
+  const [deptCode, setDeptCode] = useState("");
+  const [addingDept, setAddingDept] = useState(false);
+
+  useEffect(() => { loadDepartments(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const submitDepartment = async () => {
+    if (!deptName.trim() || !deptCode.trim()) {
+      pushToast({ type: "warning", title: "Missing details", message: "Department name and code are required." });
+      return;
+    }
+    setAddingDept(true);
+    try {
+      await addDepartment({ name: deptName.trim(), code: deptCode.trim().toUpperCase() });
+      logAction("Added department", `${deptName.trim()} (${deptCode.trim().toUpperCase()})`);
+      pushToast({ type: "success", title: "Department added" });
+      setDeptName(""); setDeptCode("");
+    } catch (err) {
+      pushToast({ type: "warning", title: "Could not add department", message: err instanceof Error ? err.message : "Please try again." });
+    } finally {
+      setAddingDept(false);
+    }
+  };
   const upd = (p: Partial<AdminSettings>) => setDraft((d) => ({ ...d, ...p }));
   const updTpl = (k: keyof AdminSettings["notifTemplates"], v: string) =>
     setDraft((d) => ({ ...d, notifTemplates: { ...d.notifTemplates, [k]: v } }));
@@ -49,6 +74,25 @@ export function SettingsTab({ settings, updateSettings, logAction }: { settings:
           <Field label="Auto-logout after inactivity (minutes)">
             <input type="number" min={1} max={120} className={fi} value={draft.sessionTimeoutMinutes} onChange={(e) => upd({ sessionTimeoutMinutes: parseInt(e.target.value) || 15 })} />
           </Field>
+        </Section>
+
+        <Section title="Departments">
+          <p className="text-[11px] text-caa-muted -mt-1 mb-2">Departments added here appear in the department dropdown when creating a job listing.</p>
+          <div className="flex flex-wrap gap-1.5 mb-3">
+            {departments.map((d) => (
+              <span key={d.id} className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-caa-navy/10 text-caa-navy">
+                {d.name} <span className="text-caa-navy/60 font-mono">({d.code})</span>
+              </span>
+            ))}
+            {departments.length === 0 && <span className="text-[11px] text-caa-muted">No departments added yet.</span>}
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-[1fr_140px_auto] gap-2">
+            <input className={fi} value={deptName} onChange={(e) => setDeptName(e.target.value)} placeholder="Department name (e.g. Air Traffic Mgmt)" />
+            <input className={fi} value={deptCode} onChange={(e) => setDeptCode(e.target.value)} placeholder="Code (e.g. ATM)" />
+            <button onClick={submitDepartment} disabled={addingDept} className="px-3 py-1.5 text-xs font-semibold bg-caa-navy text-white rounded-md disabled:opacity-60 inline-flex items-center justify-center gap-1">
+              <Plus className="h-3.5 w-3.5" /> {addingDept ? "Adding…" : "Add"}
+            </button>
+          </div>
         </Section>
 
         <Section title="Notification message templates">

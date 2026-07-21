@@ -2,8 +2,8 @@ import { createContext, useContext, useEffect, useState, useCallback, ReactNode 
 import {
   auth as authApi, jobs as jobsApi, applications as appsApi,
   notifications as notifApi, settings as settingsApi,
-  cv as cvApi, setToken, restoreSession, setSessionExpiredHandler,
-  type UserResponse,
+  cv as cvApi, criteria as criteriaApi, departments as departmentsApi, setToken, restoreSession, setSessionExpiredHandler,
+  type UserResponse, type Department,
 } from "@/lib/api/client";
 
 // ─── Base types ───────────────────────────────────────────────────────────────
@@ -79,7 +79,11 @@ export type JobCriteria = {
   minExperienceYears?: number;
   requiredQualLevel?: QualLevel;
   disqualifyingUniversities?: string[];
+  assessmentTypes?: AssessmentType[];
 };
+
+export const ASSESSMENT_TYPES = ["Written", "Oral Interview", "Practical Test"] as const;
+export type AssessmentType = typeof ASSESSMENT_TYPES[number];
 
 export type PermissionOverride = {
   email: string;
@@ -315,6 +319,9 @@ type Ctx = {
   markNotificationRead: (id: number) => void;
   criteria: JobCriteria[];
   saveCriteria: (c: JobCriteria) => void;
+  departments: Department[];
+  loadDepartments: () => void;
+  addDepartment: (data: { name: string; code: string }) => Promise<void>;
   permissionOverrides: PermissionOverride[];
   savePermissionOverride: (p: PermissionOverride) => void;
   sentEmails: SentEmail[];
@@ -593,6 +600,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<AdminSettings>(DEFAULT_SETTINGS);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [criteria, setCriteria] = useState<JobCriteria[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [permissionOverrides, setPermissionOverrides] = useState<PermissionOverride[]>([]);
   const [sentEmails, setSentEmails] = useState<SentEmail[]>([]);
   const [analyticsEvents, setAnalyticsEvents] = useState<AnalyticsEvent[]>(generateAnalyticsSeed);
@@ -758,6 +766,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const updateProfile = (patch: Partial<Pick<Auth, "firstName" | "lastName" | "email">>) => {
     persist({ ...auth, ...patch });
+    // Previously local-only — the backend row never changed, so a reload
+    // silently reverted the edit. Persist for real, keep the optimistic
+    // local update either way.
+    authApi.updateProfile(patch).catch((err) => {
+      pushToast({ type: "warning", title: "Profile not saved to server", message: err instanceof Error ? err.message : "Please check your connection and try again." });
+    });
   };
 
   const markEmailVerified = () => {
@@ -884,6 +898,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setCvStore(nextStore);
       try { localStorage.setItem(CV_STORE_KEY, JSON.stringify(nextStore)); } catch {}
     }
+    // Previously local-only (localStorage/context only) — the backend CV row
+    // never changed, which is why profile completion (computed server-side
+    // from GET /api/cv) never reflected what a candidate actually filled in.
+    cvApi.save(next).catch((err) => {
+      pushToast({ type: "warning", title: "CV not saved to server", message: err instanceof Error ? err.message : "Please check your connection and try again." });
+    });
   };
 
   const pushToast = useCallback((t: Omit<Toast, "id">) => {
@@ -936,6 +956,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const next = [...criteria.filter((x) => x.jobId !== c.jobId), c];
     setCriteria(next);
     try { localStorage.setItem(CRITERIA_KEY, JSON.stringify(next)); } catch {}
+    // Previously local-only — the backend criteria row never changed, so the
+    // server-side auto-screening on submit (which reads from the `criteria`
+    // table) never actually saw what was configured here.
+    const { jobId, ...data } = c;
+    criteriaApi.save(jobId, data).catch((err) => {
+      pushToast({ type: "warning", title: "Criteria not saved to server", message: err instanceof Error ? err.message : "Please check your connection and try again." });
+    });
+  };
+
+  // Departments are admin-only server data — fetched on demand by whichever
+  // admin screen needs them (Job Listings' dept dropdown, Settings' manager)
+  // rather than on every login, since most logins (candidates) can't read it.
+  const loadDepartments: Ctx["loadDepartments"] = () => {
+    departmentsApi.list().then((r) => { if (r.success) setDepartments(r.data); }).catch(() => {});
+  };
+
+  const addDepartment: Ctx["addDepartment"] = async (data) => {
+    const res = await departmentsApi.create(data);
+    setDepartments((prev) => [...prev, res.data].sort((a, b) => a.name.localeCompare(b.name)));
   };
 
   const savePermissionOverride: Ctx["savePermissionOverride"] = (p) => {
@@ -992,6 +1031,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         audit, settings, updateSettings, logAction,
         notifications, sendNotification, markNotificationRead,
         criteria, saveCriteria,
+        departments, loadDepartments, addDepartment,
         permissionOverrides, savePermissionOverride,
         sentEmails, logEmail, bulkLogEmails, clearEmailLog,
         analyticsEvents, trackEvent,

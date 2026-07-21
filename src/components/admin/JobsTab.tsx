@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Plus, Trash2, Pencil, AlertCircle, FileDown, RefreshCw, CheckCircle2, Upload, FileSearch,
 } from "lucide-react";
@@ -92,15 +92,23 @@ function parseJobFromText(text: string): Partial<Omit<Job, "id" | "abbr">> {
   return result;
 }
 
-export function JobsTab({ jobs, isExpired, addJob, updateJob, deleteJob, onViewApps }: any) {
+export function JobsTab({ jobs, applications, isExpired, addJob, updateJob, deleteJob, onViewApps }: any) {
   type EditingJob = Omit<Job, "id" | "abbr"> & { id?: number };
   const [editing, setEditing] = useState<null | EditingJob>(null);
   const [inputMode, setInputMode] = useState<"manual" | "pdf">("manual");
   const [pdfParsing, setPdfParsing] = useState(false);
   const [pdfFileName, setPdfFileName] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const { auth, pushToast } = useApp();
+  const { auth, pushToast, departments, loadDepartments } = useApp();
   const actor = `${auth.firstName} ${auth.lastName}`;
+
+  useEffect(() => { loadDepartments(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Prefer the real, admin-managed department list; fall back to the static
+  // one while it's loading so the form isn't blocked on first paint.
+  const deptOptions = departments.length > 0
+    ? departments.map((d) => ({ key: d.code, label: d.name }))
+    : DEPARTMENTS;
 
   const open = (j?: Job) => {
     setEditing(j ? { ...j } : { ...emptyJob });
@@ -163,6 +171,7 @@ export function JobsTab({ jobs, isExpired, addJob, updateJob, deleteJob, onViewA
               <th className="text-left p-3">Band</th>
               <th className="text-left p-3">Closes</th>
               <th className="text-left p-3">Status</th>
+              <th className="text-left p-3">Applicants</th>
               <th className="text-right p-3">Actions</th>
             </tr>
           </thead>
@@ -184,6 +193,11 @@ export function JobsTab({ jobs, isExpired, addJob, updateJob, deleteJob, onViewA
                   {isExpired(j)
                     ? <span className="px-2 py-0.5 rounded-full bg-caa-danger/10 text-caa-danger text-[10px]">Expired</span>
                     : <span className="px-2 py-0.5 rounded-full bg-caa-success/10 text-caa-success text-[10px]">Active</span>}
+                </td>
+                <td className="p-3">
+                  <button onClick={() => onViewApps(j.id)} className="text-xs font-semibold text-caa-navy hover:underline">
+                    {(applications ?? []).filter((a: Application) => a.jobId === j.id).length}
+                  </button>
                 </td>
                 <td className="p-3 text-right space-x-2">
                   <button onClick={() => onViewApps(j.id)} className="text-xs text-caa-navy hover:underline">Apps</button>
@@ -255,7 +269,7 @@ export function JobsTab({ jobs, isExpired, addJob, updateJob, deleteJob, onViewA
               /* ── Manual form ── */
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Field label="Title"><input className={fi} value={editing.title} onChange={(e) => setEditing({ ...editing, title: e.target.value })} placeholder="e.g. Senior Air Traffic Controller" /></Field>
-                <Field label="Department"><select className={fi} value={editing.deptKey} onChange={(e) => { const d = DEPARTMENTS.find((x) => x.key === e.target.value)!; setEditing({ ...editing, deptKey: d.key, dept: d.label }); }}>{DEPARTMENTS.map((d) => <option key={d.key} value={d.key}>{d.label}</option>)}</select></Field>
+                <Field label="Department"><select className={fi} value={editing.deptKey} onChange={(e) => { const d = deptOptions.find((x) => x.key === e.target.value)!; setEditing({ ...editing, deptKey: d.key, dept: d.label }); }}>{deptOptions.map((d) => <option key={d.key} value={d.key}>{d.label}</option>)}</select></Field>
                 <Field label="Location"><input className={fi} value={editing.location} onChange={(e) => setEditing({ ...editing, location: e.target.value })} /></Field>
                 <Field label="Type"><select className={fi} value={editing.type} onChange={(e) => setEditing({ ...editing, type: e.target.value as any })}>{EMPLOYMENT_TYPES.map((t) => <option key={t}>{t}</option>)}</select></Field>
                 <Field label="Salary range"><input className={fi} value={editing.salary} onChange={(e) => setEditing({ ...editing, salary: e.target.value })} placeholder="e.g. UGX 3.2M–5.8M" /></Field>
