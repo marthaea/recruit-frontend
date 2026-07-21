@@ -4,7 +4,7 @@ import { z } from "zod";
 import {
   Users, Briefcase, LayoutDashboard, FileText, GraduationCap, Download,
   ClipboardList, Settings, ChevronRight, Bell, Lock, Filter, Mail, Menu, X,
-  Activity,
+  Activity, RefreshCw,
 } from "lucide-react";
 import {
   useApp, canAccess,
@@ -59,7 +59,7 @@ const NAV_GROUPS = ["Overview", "Recruitment", "People & Insights", "System"] as
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 function AdminPage() {
-  const { auth, apiSignIn, jobs, addJob, updateJob, deleteJob, isExpired, applications,
+  const { auth, sessionRestoring, apiSignIn, jobs, addJob, updateJob, deleteJob, isExpired, applications,
           pushToast, audit, settings, updateSettings, logAction, updateApplicationStatus, bulkUpdateApplicationStatus,
           notifications, criteria, saveCriteria,
           permissionOverrides, savePermissionOverride, cvStore,
@@ -68,6 +68,19 @@ function AdminPage() {
   const { tab = auth.accountType === "admin" ? "dashboard" : "login", jobId } = Route.useSearch();
   const navigate = useNavigate();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  // A stored session looks logged-in immediately (see AppContext's mount
+  // effect) but isn't confirmed against the backend yet. Rendering the real
+  // dashboard here would fire authenticated fetches with no token — wait for
+  // confirmation instead of racing it (this was the actual cause of /admin
+  // bouncing back to candidate sign-in on a fresh load).
+  if (sessionRestoring) {
+    return (
+      <div className="flex items-center justify-center min-h-[calc(100vh-108px)]">
+        <RefreshCw className="h-6 w-6 text-caa-navy animate-spin" />
+      </div>
+    );
+  }
 
   if (auth.accountType !== "admin") {
     return (

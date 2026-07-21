@@ -271,6 +271,8 @@ const DEMO_CV_STORE: Record<string, CvProfile> = {
 type Ctx = {
   auth: Auth;
   isLoading: boolean;
+  /** True while a stored session is being revalidated against the backend on mount. */
+  sessionRestoring: boolean;
   /** Async sign-in that calls the real API. Resolves with the signed-in user so callers can branch on accountType (see admin.tsx). */
   apiSignIn: (email: string, password: string) => Promise<UserResponse>;
   /** Async register that calls the real API. Use this in register.tsx. */
@@ -574,6 +576,12 @@ const ANALYTICS_KEY  = "caa_analytics_v1";
 export function AppProvider({ children }: { children: ReactNode }) {
   const [auth, setAuth] = useState<Auth>({ isLoggedIn: false, firstName: "", lastName: "", email: "", accountType: "external" });
   const [isLoading, setIsLoading] = useState(false);
+  // True only while a stored session is being revalidated against the backend
+  // (see the mount effect below). Consumers that fetch real data on mount for
+  // a logged-in-looking user — the HR Console in particular — must wait for
+  // this to clear before rendering, or they'll fire an authenticated request
+  // with no token yet and get bounced out by the 401 handler in client.ts.
+  const [sessionRestoring, setSessionRestoring] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [signInPromptOpen, setSignInPromptOpen] = useState(false);
   const [jobs, setJobs] = useState<Job[]>(JOBS);
@@ -599,11 +607,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
           // httpOnly refresh cookie. The access token itself is never stored —
           // restoreSession() obtains a fresh one (or signs the user out).
           setAuth(stored);
+          setSessionRestoring(true);
           restoreSession().then((ok) => {
             if (!ok) {
               setAuth({ isLoggedIn: false, firstName: "", lastName: "", email: "", accountType: "external" });
               try { localStorage.removeItem(STORAGE_KEY); } catch {}
             }
+            setSessionRestoring(false);
           });
         } else {
           setAuth(stored);
@@ -971,7 +981,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   return (
     <AppCtx.Provider
       value={{
-        auth, isLoading, apiSignIn, apiRegister, signIn, signOut, updateProfile, updatePhotoUrl, markEmailVerified,
+        auth, isLoading, sessionRestoring, apiSignIn, apiRegister, signIn, signOut, updateProfile, updatePhotoUrl, markEmailVerified,
         toasts, pushToast, dismissToast,
         jobs, addJob, updateJob, deleteJob, canSeeJob, isExpired,
         applications, withdrawApplication, addApplication, updateApplicationStatus, bulkUpdateApplicationStatus,
