@@ -89,7 +89,7 @@ function useLiveTime() {
 }
 
 function DashboardPage() {
-  const { auth, applications, jobs, withdrawApplication, updateProfile, updatePhotoUrl, pushToast, notifications, markNotificationRead } = useApp();
+  const { auth, sessionRestoring, applications, jobs, withdrawApplication, updateProfile, updatePhotoUrl, pushToast, notifications, markNotificationRead } = useApp();
   const [liveApps, setLiveApps] = useState<Application[] | null>(null);
   const navigate = useNavigate();
   const now = useLiveTime();
@@ -104,25 +104,30 @@ function DashboardPage() {
   }, [auth.firstName, auth.lastName, auth.email]);
 
   useEffect(() => {
+    // A stored session looks logged-out for a moment on every fresh page load,
+    // until AppContext confirms it against the backend (see sessionRestoring).
+    // Redirecting here before that confirmation lands would kick out a
+    // perfectly valid, already-logged-in candidate — wait for it to settle.
+    if (sessionRestoring) return;
     if (!auth.isLoggedIn) navigate({ to: "/login" });
-  }, [auth.isLoggedIn, navigate]);
+  }, [auth.isLoggedIn, sessionRestoring, navigate]);
 
   // Refresh application statuses from the server each time the dashboard is opened
   useEffect(() => {
-    if (!auth.isLoggedIn || !auth.email) return;
+    if (sessionRestoring || !auth.isLoggedIn || !auth.email) return;
     appsApi.list({ email: auth.email }).then((r) => {
       if (r.success) setLiveApps(r.data as unknown as Application[]);
     }).catch(() => {});
-  }, [auth.isLoggedIn, auth.email]);
+  }, [auth.isLoggedIn, auth.email, sessionRestoring]);
 
   // Load the CV profile to compute real completeness
   const [cvProfile, setCvProfile] = useState<Record<string, unknown> | null>(null);
   useEffect(() => {
-    if (!auth.isLoggedIn) return;
+    if (sessionRestoring || !auth.isLoggedIn) return;
     cvApi.get().then((r) => {
       if (r.success && r.data) setCvProfile(r.data as unknown as Record<string, unknown>);
     }).catch(() => {});
-  }, [auth.isLoggedIn]);
+  }, [auth.isLoggedIn, sessionRestoring]);
 
   // Greeting + time
   const hour = now.getHours();

@@ -17,12 +17,18 @@ function input(cls = "") { return "w-full px-2.5 py-1.5 text-sm border border-ca
 const label = "block text-xs font-medium text-caa-body mb-1";
 
 function ApplyPage() {
-  const { auth, openSignInPrompt, jobs, cv, hasCv, saveCv, addApplication, updateApplicationStatus, criteria, pushToast } = useApp();
+  const { auth, sessionRestoring, openSignInPrompt, jobs, cv, hasCv, saveCv, addApplication, updateApplicationStatus, criteria, pushToast } = useApp();
   const { jobId } = Route.useSearch();
   const navigate = useNavigate();
   const job = jobs.find((j) => j.id === jobId) ?? jobs[0];
 
-  useEffect(() => { if (!auth.isLoggedIn) openSignInPrompt(); }, [auth.isLoggedIn, openSignInPrompt]);
+  // Wait for a stored session to be confirmed before deciding the visitor is
+  // signed out — otherwise a reload briefly flashes the sign-in prompt at an
+  // already-logged-in candidate (same race as admin.tsx / dashboard.tsx).
+  useEffect(() => {
+    if (sessionRestoring) return;
+    if (!auth.isLoggedIn) openSignInPrompt();
+  }, [auth.isLoggedIn, sessionRestoring, openSignInPrompt]);
 
   const screeningQs = useMemo(
     () => criteria.find((c) => c.jobId === job.id)?.screeningQuestions ?? [],
