@@ -3,6 +3,7 @@ import {
   auth as authApi, jobs as jobsApi, applications as appsApi,
   notifications as notifApi, settings as settingsApi,
   cv as cvApi, setToken, restoreSession, setSessionExpiredHandler,
+  type UserResponse,
 } from "@/lib/api/client";
 
 // ─── Base types ───────────────────────────────────────────────────────────────
@@ -270,8 +271,8 @@ const DEMO_CV_STORE: Record<string, CvProfile> = {
 type Ctx = {
   auth: Auth;
   isLoading: boolean;
-  /** Async sign-in that calls the real API. Use this in login.tsx. */
-  apiSignIn: (email: string, password: string) => Promise<void>;
+  /** Async sign-in that calls the real API. Resolves with the signed-in user so callers can branch on accountType (see admin.tsx). */
+  apiSignIn: (email: string, password: string) => Promise<UserResponse>;
   /** Async register that calls the real API. Use this in register.tsx. */
   apiRegister: (data: { email: string; password: string; firstName: string; lastName: string; accountType: AccountType; employeeNumber?: string }) => Promise<void>;
   /** Sync shim kept for demo/admin shortcuts — prefer apiSignIn for real auth. */
@@ -710,6 +711,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           }
         }).catch(() => {}),
       ]);
+      return u;
     } finally {
       setIsLoading(false);
     }

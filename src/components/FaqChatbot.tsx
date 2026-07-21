@@ -8,17 +8,27 @@ import { chatbot as chatbotApi } from "@/lib/api/client";
 // followUps entries must exactly match another entry's `question` string so the
 // chips resolve to that answer when clicked.
 
+// Who a question is relevant to. Persona is declared here (rather than further
+// down, where it conceptually belongs with Martha's greetings) so FaqEntry can
+// reference it — entries with no `audience` are shown/matched for everyone.
+type Persona = "guest" | "external" | "internal" | "recruiter" | "hr" | "super";
+const CANDIDATE_PERSONAS: Persona[] = ["guest", "external", "internal"];
+const ADMIN_PERSONAS: Persona[] = ["recruiter", "hr", "super"];
+
 type FaqEntry = {
   question: string;
   answer: string;
   keywords: string[];
   followUps?: string[];
+  /** Restricts which persona(s) this entry is biased toward matching. Omit for universal topics. */
+  audience?: Persona[];
 };
 
 const FAQS: FaqEntry[] = [
   // ── Authentication & Access ──────────────────────────────────────────────────
   {
     question: "How do I create a new account?",
+    audience: CANDIDATE_PERSONAS,
     answer:
       "Click the 'Register' link on the login page. Provide a valid email address (external candidates should NOT use @caa.co.ug) and a password. Your email will be used for verification and all recruitment communications, so make sure it is correct.",
     keywords: ["register", "create account", "sign up", "new account", "account"],
@@ -26,6 +36,7 @@ const FAQS: FaqEntry[] = [
   },
   {
     question: "I forgot my password. How can I reset it?",
+    audience: CANDIDATE_PERSONAS,
     answer:
       "Click 'Forgot Password?' on the login page. Enter your registered email address and we will send you a reset link. Check your spam folder if the email does not arrive within a few minutes.",
     keywords: ["forgot", "password", "reset", "lost password", "can't remember"],
@@ -33,6 +44,7 @@ const FAQS: FaqEntry[] = [
   },
   {
     question: "My login is not working. What should I do?",
+    audience: CANDIDATE_PERSONAS,
     answer:
       "Double-check your email address and password for typos, and make sure Caps Lock is off. External candidates must not use an @caa.co.ug email. Try resetting your password via 'Forgot Password?'. If the problem continues, contact HR support with your registered email.",
     keywords: ["login", "log in", "sign in", "not working", "can't login", "cannot login", "access", "error"],
@@ -40,6 +52,7 @@ const FAQS: FaqEntry[] = [
   },
   {
     question: "How do I log in as internal CAA staff?",
+    audience: CANDIDATE_PERSONAS,
     answer:
       "Use your official CAA email address (ending in @caa.co.ug) and your password. The portal automatically recognises you as an internal candidate based on your email domain, giving you access to internal-only vacancies.",
     keywords: ["internal", "staff", "caa email", "caa.co.ug", "internal login", "employee login"],
@@ -55,6 +68,7 @@ const FAQS: FaqEntry[] = [
   // ── Finding Vacancies ────────────────────────────────────────────────────────
   {
     question: "How can I find available jobs?",
+    audience: CANDIDATE_PERSONAS,
     answer:
       "Navigate to the 'Vacancies' section from the main menu. You can browse all public listings or use the search bar and filters (department, location) to narrow down your options.",
     keywords: ["find", "jobs", "vacancies", "available", "listings", "open positions"],
@@ -62,6 +76,7 @@ const FAQS: FaqEntry[] = [
   },
   {
     question: "Can I search for jobs by keyword?",
+    audience: CANDIDATE_PERSONAS,
     answer:
       "Yes. Use the search bar on the 'Vacancies' page to search by job title, skills, or any relevant keyword.",
     keywords: ["search", "keyword", "search jobs", "find job", "job title"],
@@ -69,6 +84,7 @@ const FAQS: FaqEntry[] = [
   },
   {
     question: "How do I filter job listings?",
+    audience: CANDIDATE_PERSONAS,
     answer:
       "On the 'Vacancies' page, use the Department and Location filters to refine your search, then click 'Apply Filters'.",
     keywords: ["filter", "department", "location", "refine", "narrow"],
@@ -76,6 +92,7 @@ const FAQS: FaqEntry[] = [
   },
   {
     question: "What information is on a job details page?",
+    audience: CANDIDATE_PERSONAS,
     answer:
       "Each job page shows a full role description, requirements, department, location, job type (full-time / part-time), and the application closing date, plus an 'Apply Now' button.",
     keywords: ["job details", "job description", "requirements", "closing date", "job type"],
@@ -83,6 +100,7 @@ const FAQS: FaqEntry[] = [
   },
   {
     question: "How can I view internal-only job listings?",
+    audience: CANDIDATE_PERSONAS,
     answer:
       "Log in with your @caa.co.ug email. The 'Vacancies' page will then display both public and internal-only listings; internal listings are clearly marked.",
     keywords: ["internal jobs", "internal listings", "internal only", "internal vacancies"],
@@ -91,6 +109,7 @@ const FAQS: FaqEntry[] = [
   // ── Applying ─────────────────────────────────────────────────────────────────
   {
     question: "How do I apply for a job?",
+    audience: CANDIDATE_PERSONAS,
     answer:
       "Go to the job details page of the vacancy you want, click 'Apply Now', and follow the step-by-step form. You must be logged in to submit an application.",
     keywords: ["apply", "how to apply", "apply now", "submit application", "applying", "start application"],
@@ -98,6 +117,7 @@ const FAQS: FaqEntry[] = [
   },
   {
     question: "What documents do I need to submit?",
+    audience: CANDIDATE_PERSONAS,
     answer:
       "Typically a resume and cover letter. Some roles may also require a profile picture or additional documents. The application form will specify exactly what is needed for each position.",
     keywords: ["documents", "resume", "cv", "cover letter", "upload", "files", "attachments"],
@@ -105,6 +125,7 @@ const FAQS: FaqEntry[] = [
   },
   {
     question: "Can I apply for more than one vacancy?",
+    audience: CANDIDATE_PERSONAS,
     answer:
       "Yes. Internal candidates can apply for both internal-only and public listings. External candidates can apply for any publicly advertised role.",
     keywords: ["multiple", "more than one", "several", "two jobs", "both"],
@@ -112,6 +133,7 @@ const FAQS: FaqEntry[] = [
   },
   {
     question: "What is the status of my application?",
+    audience: CANDIDATE_PERSONAS,
     answer:
       "Log in and go to your 'Candidate Dashboard'. Each application shows its current status: Pending, Under Review, Shortlisted, Interview, Offered, Declined, or Withdrawn.",
     keywords: ["application status", "status", "check status", "track", "progress", "where is my application"],
@@ -119,6 +141,7 @@ const FAQS: FaqEntry[] = [
   },
   {
     question: "Can I withdraw my application?",
+    audience: CANDIDATE_PERSONAS,
     answer:
       "Yes. From your Candidate Dashboard, find the application and click 'Withdraw'. Note that some applications (e.g., those already shortlisted) may not be withdrawable — a tooltip will explain if the button is disabled.",
     keywords: ["withdraw", "cancel", "remove application", "take back"],
@@ -127,6 +150,7 @@ const FAQS: FaqEntry[] = [
   // ── Profile & Documents ───────────────────────────────────────────────────────
   {
     question: "How do I update my personal details?",
+    audience: CANDIDATE_PERSONAS,
     answer:
       "Go to the 'Profile' section in your candidate dashboard. You can edit your full name, phone number, address, and LinkedIn profile there.",
     keywords: ["update profile", "personal details", "edit profile", "change name", "phone number", "address"],
@@ -134,6 +158,7 @@ const FAQS: FaqEntry[] = [
   },
   {
     question: "How do I upload my resume or cover letter?",
+    audience: CANDIDATE_PERSONAS,
     answer:
       "In the 'Profile' section of your dashboard, you will find dedicated upload areas for your resume, cover letter, and profile picture. Make sure your documents are in an accepted format (e.g., PDF) before uploading.",
     keywords: ["upload", "resume", "cv", "cover letter", "profile picture", "photo", "document upload"],
@@ -141,6 +166,7 @@ const FAQS: FaqEntry[] = [
   },
   {
     question: "How do I add my educational qualifications?",
+    audience: CANDIDATE_PERSONAS,
     answer:
       "Navigate to the 'Education' sub-section within your Profile. You can add entries for each institution including degree, field of study, and dates, and edit or delete existing entries.",
     keywords: ["education", "degree", "qualification", "university", "institution", "academic"],
@@ -148,6 +174,7 @@ const FAQS: FaqEntry[] = [
   },
   {
     question: "Can I add professional certificates to my profile?",
+    audience: CANDIDATE_PERSONAS,
     answer:
       "Yes. In the 'Certificates' sub-section of your Profile, add your certifications including the certificate name, issuing organisation, and issue/expiry dates.",
     keywords: ["certificate", "certification", "professional", "license", "licence"],
@@ -155,6 +182,7 @@ const FAQS: FaqEntry[] = [
   },
   {
     question: "How do I add referee details?",
+    audience: CANDIDATE_PERSONAS,
     answer:
       "Use the 'Referees' sub-section in your Profile to add referee contact details including their full name, email, phone number, and their relationship to you.",
     keywords: ["referee", "reference", "referees", "contact referee"],
@@ -163,6 +191,7 @@ const FAQS: FaqEntry[] = [
   // ── Notifications ─────────────────────────────────────────────────────────────
   {
     question: "How will I be notified about my application?",
+    audience: CANDIDATE_PERSONAS,
     answer:
       "You will receive email notifications at every stage — when your application is received, shortlisted, and when an interview or offer is made. You can also check real-time status on your dashboard at any time.",
     keywords: ["notify", "notification", "email notification", "informed", "alert", "update"],
@@ -171,6 +200,7 @@ const FAQS: FaqEntry[] = [
   // ── Shortlisting & Interviews ─────────────────────────────────────────────────
   {
     question: "What happens after I am shortlisted?",
+    audience: CANDIDATE_PERSONAS,
     answer:
       "You will receive an email invitation for an oral interview. The email will include the date, time, venue, and documents to bring. Please respond to confirm your attendance.",
     keywords: ["shortlisted", "shortlist", "after shortlisting", "what next", "interview invitation"],
@@ -178,6 +208,7 @@ const FAQS: FaqEntry[] = [
   },
   {
     question: "What is the interview process like?",
+    audience: CANDIDATE_PERSONAS,
     answer:
       "Interviews are conducted by a panel of HR and technical specialists. Expect competency-based questions, technical questions related to the role, and questions about your experience. Some roles include a written test before the panel interview.",
     keywords: ["interview", "panel", "interview process", "prepare", "questions", "written test"],
@@ -186,6 +217,7 @@ const FAQS: FaqEntry[] = [
   // ── Offers ────────────────────────────────────────────────────────────────────
   {
     question: "How do I receive and respond to a job offer?",
+    audience: CANDIDATE_PERSONAS,
     answer:
       "If selected, you will receive an offer via email and your dashboard status will change to 'Offered'. Contact the HR team at hr@caa.go.ug to accept or discuss the offer terms.",
     keywords: ["offer", "job offer", "accepted", "offered", "accept offer", "reject offer"],
@@ -194,6 +226,7 @@ const FAQS: FaqEntry[] = [
   // ── HR Console — Applications ─────────────────────────────────────────────────
   {
     question: "How do I review applications in the HR Console?",
+    audience: ADMIN_PERSONAS,
     answer:
       "In the HR Console, go to the 'Applications' tab. You will see a table of all applications. Click any application to view the full candidate profile and application history.",
     keywords: ["review applications", "applications tab", "candidate profile", "hr console applications"],
@@ -201,6 +234,7 @@ const FAQS: FaqEntry[] = [
   },
   {
     question: "How do I shortlist a candidate?",
+    audience: ADMIN_PERSONAS,
     answer:
       "Open the application detail view and update the status to 'Shortlisted'. Add any relevant notes. The candidate will automatically receive a notification.",
     keywords: ["shortlist candidate", "shortlisting", "how to shortlist"],
@@ -208,6 +242,7 @@ const FAQS: FaqEntry[] = [
   },
   {
     question: "How do I schedule an interview?",
+    audience: ADMIN_PERSONAS,
     answer:
       "From the detailed application view, select the option to schedule an interview. Specify the interviewer, date, time, and location. The candidate will be notified by email.",
     keywords: ["schedule interview", "interview scheduling", "book interview", "set interview"],
@@ -215,6 +250,7 @@ const FAQS: FaqEntry[] = [
   },
   {
     question: "How do I extend a job offer to a candidate?",
+    audience: ADMIN_PERSONAS,
     answer:
       "When reviewing a candidate's application, select the option to extend an offer. Specify salary, benefits, and offer expiry date. The candidate will be notified to respond.",
     keywords: ["extend offer", "make offer", "offer candidate", "job offer hr"],
@@ -223,6 +259,7 @@ const FAQS: FaqEntry[] = [
   // ── HR Console — Jobs ─────────────────────────────────────────────────────────
   {
     question: "How do I create a new job vacancy?",
+    audience: ADMIN_PERSONAS,
     answer:
       "In the HR Console, go to the 'Job Listings' tab and click 'Create New Vacancy'. Fill in all job details, requirements, and the application deadline, then save.",
     keywords: ["create vacancy", "new job", "post job", "create job", "add vacancy"],
@@ -230,6 +267,7 @@ const FAQS: FaqEntry[] = [
   },
   {
     question: "How do I publish or close a job vacancy?",
+    audience: ADMIN_PERSONAS,
     answer:
       "From the 'Job Listings' tab, select the vacancy and change its status to 'Published' to make it visible to candidates, or 'Closed' to stop accepting applications.",
     keywords: ["publish", "close vacancy", "close job", "job status", "activate job"],
@@ -238,6 +276,7 @@ const FAQS: FaqEntry[] = [
   // ── HR Console — Reports ──────────────────────────────────────────────────────
   {
     question: "Where can I find recruitment reports and analytics?",
+    audience: ADMIN_PERSONAS,
     answer:
       "HR Directors and Super Admins can access the 'Reports & Exports' tab for application statistics, time-to-hire metrics, diversity reports, and CSV/Excel exports. Recruiters can view high-level metrics on their dashboard only.",
     keywords: ["reports", "analytics", "export", "statistics", "csv", "excel", "time to hire"],
@@ -246,6 +285,7 @@ const FAQS: FaqEntry[] = [
   // ── System & Settings ─────────────────────────────────────────────────────────
   {
     question: "How do I manage system settings?",
+    audience: ADMIN_PERSONAS,
     answer:
       "Super Admins can access the 'Settings' tab in the HR Console to configure system-wide parameters such as email templates, integration keys, and portal branding.",
     keywords: ["settings", "system settings", "email templates", "branding", "configure"],
@@ -253,6 +293,7 @@ const FAQS: FaqEntry[] = [
   },
   {
     question: "How do I view the audit log?",
+    audience: ADMIN_PERSONAS,
     answer:
       "The 'Audit Log' tab in the HR Console provides a full record of significant system events and user actions. Filter by user, entity type, or date range to track activities.",
     keywords: ["audit", "audit log", "log", "activity", "history", "track actions"],
@@ -260,6 +301,7 @@ const FAQS: FaqEntry[] = [
   },
   {
     question: "How do I manage user permissions and roles?",
+    audience: ADMIN_PERSONAS,
     answer:
       "The 'Permissions' tab in the HR Console (Super Admin access) allows you to view and update role-based permissions to control what each user type can access across the portal.",
     keywords: ["permissions", "roles", "access control", "user roles", "manage users"],
@@ -417,8 +459,6 @@ function timeGreeting(): string {
 
 // Starter/suggestion topics tailored to who is signed in.
 // Every string must exactly match a FAQS question.
-type Persona = "guest" | "external" | "internal" | "recruiter" | "hr" | "super";
-
 const ROLE_TOPICS: Record<Persona, string[]> = {
   guest: [
     "How do I create a new account?",
@@ -459,9 +499,9 @@ const ROLE_TOPICS: Record<Persona, string[]> = {
 };
 
 const WELCOMES = [
-  (name: string) => `${timeGreeting()}${name ? `, ${name}` : ""}! I'm Martha, your CAA virtual assistant. I can help with job applications, aviation careers, drone permits, and anything else about the Civil Aviation Authority. What can I do for you today?`,
-  (name: string) => `${timeGreeting()}${name ? `, ${name}` : ""}! Martha here — your guide to everything CAA Uganda. Ask me about vacancies, the recruitment process, our airports, or aviation in general. How can I help?`,
-  (name: string) => `Hello${name ? ` ${name}` : ""}, and welcome! My name is Martha and I work with the CAA Uganda team. Whether it's finding a job, checking your application, or a question about aviation in Uganda — I'm happy to help.`,
+  (name: string) => `${timeGreeting()}${name ? ` ${name}` : ""}. My name is Martha and I work with UCAA — I'm here to answer all your questions.`,
+  (name: string) => `${timeGreeting()}${name ? ` ${name}` : ""}, I'm Martha from UCAA. What can I help you with today?`,
+  (name: string) => `Hi${name ? ` ${name}` : ""}, Martha here from UCAA. How can I help?`,
 ];
 
 const FALLBACKS = [
@@ -592,8 +632,13 @@ function wordsMatch(a: string, b: string): boolean {
   return Math.abs(a.length - b.length) <= maxD && editDistance(a, b) <= maxD;
 }
 
-function scoreEntry(faq: FaqEntry, qNorm: string, qWords: string[], contextBoost: Set<string> | null): number {
+function scoreEntry(faq: FaqEntry, qNorm: string, qWords: string[], contextBoost: Set<string> | null, persona: Persona): number {
   let score = 0;
+  // Role bias: candidates and HR Console staff share vocabulary ("shortlist",
+  // "offer", "apply") for entries that mean different things to each of them.
+  // Without this, whichever entry scores marginally higher on raw keywords wins
+  // for everyone, regardless of who's actually asking.
+  if (faq.audience) score += faq.audience.includes(persona) ? 6 : -6;
   for (const kw of faq.keywords) {
     if (qNorm.includes(kw)) {
       score += kw.length * 2; // exact phrase hit
@@ -639,7 +684,7 @@ type BotReply = {
   entry?: FaqEntry;
 };
 
-function resolve(query: string, starterTopics: string[], lastEntry: FaqEntry | null): BotReply {
+function resolve(query: string, starterTopics: string[], lastEntry: FaqEntry | null, persona: Persona): BotReply {
   const q = query.toLowerCase().trim();
 
   // Small talk first — keeps Martha feeling human
@@ -659,7 +704,7 @@ function resolve(query: string, starterTopics: string[], lastEntry: FaqEntry | n
   const contextBoost = lastEntry?.followUps ? new Set(lastEntry.followUps) : null;
 
   const ranked = FAQS
-    .map((faq) => ({ faq, score: scoreEntry(faq, qNorm, qWords, contextBoost) }))
+    .map((faq) => ({ faq, score: scoreEntry(faq, qNorm, qWords, contextBoost, persona) }))
     .filter((r) => r.score > 0)
     .sort((a, b) => b.score - a.score);
 
@@ -752,7 +797,7 @@ export function FaqChatbot() {
     // Slightly randomised delay so Martha feels less mechanical
     const delay = 500 + Math.random() * 600;
     setTimeout(() => {
-      const reply = resolve(trimmed, topics, lastEntryRef.current);
+      const reply = resolve(trimmed, topics, lastEntryRef.current, persona);
       if (reply.entry) lastEntryRef.current = reply.entry;
       setTyping(false);
       setMessages((prev) => [...prev, { from: "bot", text: reply.text, followUps: reply.followUps }]);

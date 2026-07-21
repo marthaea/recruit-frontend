@@ -147,6 +147,7 @@ export function AnalyticsTab({ analyticsEvents }: { analyticsEvents: AnalyticsEv
         const all = botQueries ?? [];
         const answered = all.filter((q) => q.outcome === "answered").length;
         const unanswered = all.filter((q) => q.outcome !== "answered");
+        const recent = [...all].sort((a, b) => new Date(b.askedAt).getTime() - new Date(a.askedAt).getTime()).slice(0, 15);
         const grouped = Object.values(
           unanswered.reduce((acc: Record<string, { query: string; count: number; outcome: string; matched: string | null }>, q) => {
             const k = q.query.toLowerCase();
@@ -157,6 +158,16 @@ export function AnalyticsTab({ analyticsEvents }: { analyticsEvents: AnalyticsEv
           }, {})
         ).sort((a, b) => b.count - a.count).slice(0, 12);
 
+        const outcomeBadge = (outcome: string) => (
+          <span className={`shrink-0 px-2 py-0.5 rounded-full font-semibold text-[10px] ${
+            outcome === "answered" ? "bg-caa-success/10 text-caa-success"
+            : outcome === "fallback" ? "bg-caa-danger/10 text-caa-danger"
+            : "bg-amber-100 text-amber-700"
+          }`}>
+            {outcome === "answered" ? "Answered" : outcome === "fallback" ? "No answer" : "Unsure"}
+          </span>
+        );
+
         return (
           <div className="caa-card p-4">
             <div className="flex items-center gap-2 mb-1">
@@ -164,7 +175,7 @@ export function AnalyticsTab({ analyticsEvents }: { analyticsEvents: AnalyticsEv
               <h3 className="text-xs font-semibold uppercase tracking-widest text-caa-navy">Martha — Chatbot Questions (30d)</h3>
             </div>
             <p className="text-[11px] text-caa-muted mb-3">
-              Typed questions Martha could not answer confidently. Frequent entries are the best candidates for new FAQ content.
+              Every question typed to Martha is logged here, most recent first — plus which ones need new FAQ content.
             </p>
             {botQueries === null ? (
               <p className="text-xs text-caa-muted">Loading…</p>
@@ -181,17 +192,28 @@ export function AnalyticsTab({ analyticsEvents }: { analyticsEvents: AnalyticsEv
                   <span className="text-caa-muted">Answered: <span className="font-bold text-caa-success">{answered}</span></span>
                   <span className="text-caa-muted">Needs attention: <span className="font-bold text-caa-danger">{unanswered.length}</span></span>
                 </div>
+
+                <p className="text-[11px] font-semibold text-caa-navy mb-2">Recent questions</p>
+                <div className="divide-y divide-caa-border mb-4">
+                  {recent.map((q) => (
+                    <div key={q.id} className="flex items-center gap-3 py-2 text-xs">
+                      {outcomeBadge(q.outcome)}
+                      <span className="text-caa-body flex-1 min-w-0 truncate" title={q.query}>"{q.query}"</span>
+                      {q.matchedQuestion && <span className="text-caa-muted truncate hidden sm:block max-w-[160px]" title={`Matched: ${q.matchedQuestion}`}>→ {q.matchedQuestion}</span>}
+                      <span className="text-caa-muted shrink-0 capitalize hidden sm:inline">{q.persona}</span>
+                      <span className="text-caa-muted shrink-0 w-16 text-right tabular-nums">{new Date(q.askedAt).toLocaleDateString("en-UG", { day: "2-digit", month: "short" })}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <p className="text-[11px] font-semibold text-caa-navy mb-2">Needs a better answer</p>
                 {grouped.length === 0 ? (
                   <p className="text-xs text-caa-success font-medium">Martha answered everything she was asked. 🎉</p>
                 ) : (
                   <div className="divide-y divide-caa-border">
                     {grouped.map((g) => (
                       <div key={g.query} className="flex items-center gap-3 py-2 text-xs">
-                        <span className={`shrink-0 px-2 py-0.5 rounded-full font-semibold text-[10px] ${
-                          g.outcome === "fallback" ? "bg-caa-danger/10 text-caa-danger" : "bg-amber-100 text-amber-700"
-                        }`}>
-                          {g.outcome === "fallback" ? "No answer" : "Unsure"}
-                        </span>
+                        {outcomeBadge(g.outcome)}
                         <span className="text-caa-body flex-1 min-w-0 truncate" title={g.query}>"{g.query}"</span>
                         {g.matched && <span className="text-caa-muted truncate hidden sm:block max-w-[180px]" title={`Closest match: ${g.matched}`}>→ {g.matched}</span>}
                         <span className="text-caa-muted shrink-0 font-semibold">×{g.count}</span>

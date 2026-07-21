@@ -7,7 +7,7 @@ import {
   Activity,
 } from "lucide-react";
 import {
-  useApp, HR_USERS, canAccess,
+  useApp, canAccess,
   type Job, type Application,
 } from "@/context/AppContext";
 import { AdminLogin } from "@/components/admin/AdminLogin";
@@ -59,7 +59,7 @@ const NAV_GROUPS = ["Overview", "Recruitment", "People & Insights", "System"] as
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 function AdminPage() {
-  const { auth, signIn, jobs, addJob, updateJob, deleteJob, isExpired, applications,
+  const { auth, apiSignIn, jobs, addJob, updateJob, deleteJob, isExpired, applications,
           pushToast, audit, settings, updateSettings, logAction, updateApplicationStatus, bulkUpdateApplicationStatus,
           notifications, criteria, saveCriteria,
           permissionOverrides, savePermissionOverride, cvStore,
@@ -71,14 +71,18 @@ function AdminPage() {
 
   if (auth.accountType !== "admin") {
     return (
-      <AdminLogin onLogin={(email, pw) => {
-        const key = email.trim().toLowerCase();
-        const rec = HR_USERS[key];
-        if (!rec || rec.password !== pw) {
-          pushToast({ type: "warning", title: "Invalid credentials", message: "Incorrect email or password." });
+      <AdminLogin onLogin={async (email, pw) => {
+        let u;
+        try {
+          u = await apiSignIn(email.trim(), pw);
+        } catch (err) {
+          pushToast({ type: "warning", title: "Sign in failed", message: err instanceof Error ? err.message : "Incorrect email or password." });
           return;
         }
-        signIn(rec.firstName, rec.lastName, key, { accountType: "admin", adminRole: rec.role });
+        if (u.accountType !== "admin") {
+          pushToast({ type: "warning", title: "Access denied", message: "This account does not have HR Console access." });
+          return;
+        }
         navigate({ to: "/admin", search: { tab: "dashboard" } });
       }} />
     );
