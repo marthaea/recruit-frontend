@@ -985,3 +985,95 @@ export function downloadApplicantsPerClosingDateReport(
   footer(doc, actor);
   doc.save(`caa-applicants-per-closing-date-${Date.now()}.pdf`);
 }
+
+// ─── Phase 2b — Assessment, background check & deployment reports ────────────
+
+type AssessmentRow = {
+  candidateName: string; jobTitle: string; type: string;
+  scheduledAt: string | null; venue: string | null;
+  score: number | null; passed: boolean | null; notes: string | null;
+};
+
+export function downloadAssessmentScheduleReport(rows: AssessmentRow[], actor: string) {
+  const doc = new jsPDF();
+  const scheduled = rows.filter((r) => r.scheduledAt);
+  header(doc, "Assessment Schedule Report", `${scheduled.length} scheduled assessments as at ${new Date().toLocaleDateString()}`);
+  autoTable(doc, {
+    startY: 65,
+    head: [["Candidate", "Position", "Type", "Date & Time", "Venue"]],
+    body: scheduled.map((r) => [
+      r.candidateName, r.jobTitle, r.type[0].toUpperCase() + r.type.slice(1),
+      r.scheduledAt ? new Date(r.scheduledAt).toLocaleString() : "—", r.venue ?? "—",
+    ]),
+    headStyles: { fillColor: NAVY, textColor: 255, fontStyle: "bold" },
+    styles: { fontSize: 8.5, cellPadding: 2.5 },
+    alternateRowStyles: { fillColor: [245, 247, 250] },
+  });
+  footer(doc, actor);
+  doc.save(`caa-assessment-schedule-${Date.now()}.pdf`);
+}
+
+export function downloadCandidateAssessmentReport(rows: AssessmentRow[], actor: string) {
+  const doc = new jsPDF();
+  const recorded = rows.filter((r) => r.passed !== null);
+  header(doc, "Candidate Assessment Report", `${recorded.length} recorded results as at ${new Date().toLocaleDateString()}`);
+  autoTable(doc, {
+    startY: 65,
+    head: [["Candidate", "Position", "Type", "Score", "Outcome", "Notes"]],
+    body: recorded.map((r) => [
+      r.candidateName, r.jobTitle, r.type[0].toUpperCase() + r.type.slice(1),
+      r.score != null ? r.score.toFixed(1) : "—", r.passed ? "Passed" : "Failed", r.notes ?? "—",
+    ]),
+    headStyles: { fillColor: NAVY, textColor: 255, fontStyle: "bold" },
+    styles: { fontSize: 8, cellPadding: 2.5 },
+    alternateRowStyles: { fillColor: [245, 247, 250] },
+  });
+  footer(doc, actor);
+  doc.save(`caa-candidate-assessment-${Date.now()}.pdf`);
+}
+
+type BackgroundCheckRow = {
+  candidateName: string; jobTitle: string; refereeName: string | null;
+  refereeEmail: string | null; status: string; contactedAt: string | null;
+};
+
+export function downloadBackgroundCheckReport(rows: BackgroundCheckRow[], actor: string) {
+  const doc = new jsPDF();
+  header(doc, "Candidate Background Check Report", `${rows.length} referee checks as at ${new Date().toLocaleDateString()}`);
+  const statusLabel: Record<string, string> = {
+    pending: "Pending", contacted: "Contacted", verified: "Verified",
+    could_not_reach: "Could Not Reach", declined_to_confirm: "Declined to Confirm",
+  };
+  autoTable(doc, {
+    startY: 65,
+    head: [["Candidate", "Position", "Referee", "Email", "Status", "Contacted"]],
+    body: rows.map((r) => [
+      r.candidateName, r.jobTitle, r.refereeName ?? "—", r.refereeEmail ?? "—",
+      statusLabel[r.status] ?? r.status, r.contactedAt ? new Date(r.contactedAt).toLocaleDateString() : "—",
+    ]),
+    headStyles: { fillColor: NAVY, textColor: 255, fontStyle: "bold" },
+    styles: { fontSize: 8, cellPadding: 2.5 },
+    alternateRowStyles: { fillColor: [245, 247, 250] },
+  });
+  footer(doc, actor);
+  doc.save(`caa-background-check-${Date.now()}.pdf`);
+}
+
+export function downloadDeploymentReport(apps: Application[], actor: string) {
+  const doc = new jsPDF();
+  const deployed = apps.filter((a) => a.status === "Offered");
+  header(doc, "Candidate Deployment Report", `${deployed.length} offered candidates as at ${new Date().toLocaleDateString()}`);
+  autoTable(doc, {
+    startY: 65,
+    head: [["Candidate", "Position", "Department", "Deployment Station", "Reporting Date"]],
+    body: deployed.map((a) => [
+      a.candidateName ?? "—", a.title, a.dept,
+      a.deploymentStation ?? "Not yet assigned", a.deploymentDate ?? "—",
+    ]),
+    headStyles: { fillColor: NAVY, textColor: 255, fontStyle: "bold" },
+    styles: { fontSize: 8.5, cellPadding: 2.5 },
+    alternateRowStyles: { fillColor: [245, 247, 250] },
+  });
+  footer(doc, actor);
+  doc.save(`caa-deployment-${Date.now()}.pdf`);
+}

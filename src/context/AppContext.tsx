@@ -11,8 +11,15 @@ import {
 
 export type Visibility = "external" | "internal";
 export type QualLevel = "O-Level" | "A-Level" | "Certificate" | "Diploma" | "Degree" | "Masters" | "PhD";
-export type ApplicationStatus = "Pending" | "Under Review" | "Shortlisted" | "Interview" | "Offered" | "Declined";
-export const APPLICATION_STATUSES: ApplicationStatus[] = ["Pending", "Under Review", "Shortlisted", "Interview", "Offered", "Declined"];
+export type ApplicationStatus =
+  | "Pending" | "Under Review" | "Shortlisted" | "Interview"
+  | "Assessment Scheduled" | "Assessment Complete" | "Shortlisted II" | "Background Check"
+  | "Offered" | "Declined";
+export const APPLICATION_STATUSES: ApplicationStatus[] = [
+  "Pending", "Under Review", "Shortlisted", "Interview",
+  "Assessment Scheduled", "Assessment Complete", "Shortlisted II", "Background Check",
+  "Offered", "Declined",
+];
 export type AdminRole = "super" | "hr" | "recruiter" | "auditor" | "hr_officer" | "it_admin" | "dhra" | "hod";
 export const ADMIN_ROLES: AdminRole[] = ["super", "hr", "recruiter", "auditor", "hr_officer", "it_admin", "dhra", "hod"];
 export const ADMIN_ROLE_LABELS: Record<AdminRole, string> = {
@@ -111,6 +118,9 @@ export type PermissionOverride = {
   canManageDepartments: boolean;
   canManageAdmins: boolean;
   canAssignRights: boolean;
+  canScheduleAssessment: boolean;
+  canRecordAssessment: boolean;
+  canManageBackgroundChecks: boolean;
 };
 
 // ─── RBAC ─────────────────────────────────────────────────────────────────────
@@ -127,12 +137,14 @@ export let ROLE_DEFAULTS: Record<AdminRole, Partial<PermissionOverride>> = {
     canScreenInterns: true, canSendNotifications: true,
     canReviewJob: true, canApproveJob: true, canManageDepartments: true,
     canManageAdmins: true, canAssignRights: true,
+    canScheduleAssessment: true, canRecordAssessment: true, canManageBackgroundChecks: true,
   },
   hr: {
     canViewAudit: false, canManageJobs: true, canExport: true, canViewStaff: true,
     canManageSettings: false, canGrantPermissions: false, canManageCriteria: true,
     canShortlist: true, canViewApplications: true,
     canScreenInterns: true, canSendNotifications: true,
+    canScheduleAssessment: true, canManageBackgroundChecks: true,
   },
   recruiter: {
     canViewAudit: false, canManageJobs: false, canExport: false, canViewStaff: false,
@@ -144,13 +156,15 @@ export let ROLE_DEFAULTS: Record<AdminRole, Partial<PermissionOverride>> = {
   hr_officer: {
     canViewApplications: true, canShortlist: true, canManageJobs: true,
     canManageCriteria: true, canSendNotifications: true,
+    canScheduleAssessment: true, canManageBackgroundChecks: true,
   },
   it_admin: { canAssignRights: true },
   dhra: {
     canViewApplications: true, canShortlist: true, canApproveJob: true,
     canExport: true, canViewAudit: true,
+    canScheduleAssessment: true, canRecordAssessment: true, canManageBackgroundChecks: true,
   },
-  hod: { canViewApplications: true, canShortlist: true, canReviewJob: true },
+  hod: { canViewApplications: true, canShortlist: true, canReviewJob: true, canRecordAssessment: true },
 };
 
 /** Overwrites the role-defaults table with the real one from the backend. */
@@ -191,9 +205,14 @@ export type Application = {
   cgpa?: number; university?: string;
   /** Candidate's answers to the job's screening questions, keyed by ScreeningQuestion.id. */
   screeningAnswers?: Record<string, string>;
+  deploymentStation?: string | null;
+  deploymentDate?: string | null;
 };
 
-const NON_WITHDRAWABLE_STATUSES: ApplicationStatus[] = ["Shortlisted", "Interview", "Offered"];
+const NON_WITHDRAWABLE_STATUSES: ApplicationStatus[] = [
+  "Shortlisted", "Interview", "Assessment Scheduled", "Assessment Complete",
+  "Shortlisted II", "Background Check", "Offered",
+];
 export function canWithdraw(status: ApplicationStatus): boolean {
   return !NON_WITHDRAWABLE_STATUSES.includes(status);
 }

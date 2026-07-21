@@ -20,7 +20,7 @@ export function MarthaAvatar({ size = 40, className = "", talking = false, wavin
       viewBox="0 0 64 64"
       className={className}
       role="img"
-      aria-label="Martha, CAA virtual assistant"
+      aria-label="Martha, UCAA virtual assistant"
     >
       <style>{`
         .martha-breathe {

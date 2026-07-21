@@ -185,6 +185,9 @@ export const applications = {
   withdraw: (id: number) =>
     del<ApiResponse<{ message: string }>>(`/applications/${id}`),
 
+  setDeployment: (id: number, data: { deploymentStation?: string; deploymentDate?: string }) =>
+    put<ApiResponse<Application>>(`/applications/${id}/deployment`, data),
+
   // Returns a URL for direct browser navigation (triggers file download)
   exportUrl: (params?: { jobId?: number; status?: string }) => {
     const qs = params
@@ -312,6 +315,51 @@ export const adminUsers = {
   list: () => get<ListResponse<AdminUser>>("/users/admin"),
   create: (data: { email: string; password: string; firstName: string; lastName: string; adminRole: string }) =>
     post<ApiResponse<AdminUser>>("/users/admin", data),
+};
+
+// ── Assessments ───────────────────────────────────────────────────────────────
+export type AssessmentKind = "written" | "psychometric" | "interview" | "practical";
+export interface Assessment {
+  id: number;
+  applicationId: number;
+  type: AssessmentKind;
+  scheduledAt: string | null;
+  venue: string | null;
+  score: number | null;
+  passed: boolean | null;
+  notes: string | null;
+}
+
+export const assessments = {
+  list: (applicationId: number) => get<ListResponse<Assessment>>(`/assessments/${applicationId}`),
+  listAll: () => get<ListResponse<Assessment & { candidateName: string; jobTitle: string; dept: string }>>("/assessments"),
+  schedule: (applicationId: number, type: AssessmentKind, data: { scheduledAt: string; venue?: string }) =>
+    put<ApiResponse<Assessment>>(`/assessments/${applicationId}/${type}`, data),
+  record: (applicationId: number, type: AssessmentKind, data: { score?: number; passed: boolean; notes?: string }) =>
+    put<ApiResponse<Assessment>>(`/assessments/${applicationId}/${type}`, data),
+};
+
+// ── Background checks ────────────────────────────────────────────────────────
+export type BackgroundCheckStatus = "pending" | "contacted" | "verified" | "could_not_reach" | "declined_to_confirm";
+export interface BackgroundCheck {
+  id: number;
+  applicationId: number;
+  refereeIndex: number;
+  refereeName: string | null;
+  refereeEmail: string | null;
+  refereePhone: string | null;
+  status: BackgroundCheckStatus;
+  notes: string | null;
+  contactedAt: string | null;
+}
+
+export const backgroundChecks = {
+  list: (applicationId: number) => get<ListResponse<BackgroundCheck>>(`/background-checks/${applicationId}`),
+  listAll: () => get<ListResponse<BackgroundCheck & { candidateName: string; jobTitle: string; dept: string }>>("/background-checks"),
+  init: (applicationId: number) => post<ListResponse<BackgroundCheck>>(`/background-checks/${applicationId}/init`, {}),
+  update: (id: number, data: { status?: BackgroundCheckStatus; notes?: string }) =>
+    put<ApiResponse<BackgroundCheck>>(`/background-checks/${id}`, data),
+  sendEmail: (id: number) => post<ApiResponse<BackgroundCheck>>(`/background-checks/${id}/send-email`, {}),
 };
 
 // ── Permissions ───────────────────────────────────────────────────────────────

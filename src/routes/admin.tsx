@@ -5,6 +5,7 @@ import {
   Users, Briefcase, LayoutDashboard, FileText, GraduationCap, Download,
   ClipboardList, Settings, ChevronRight, Bell, Lock, Filter, Mail, Menu, X,
   Activity, RefreshCw, ClipboardCheck, CheckSquare, ListChecks, Users2, UserCog,
+  CalendarClock, ShieldCheck,
 } from "lucide-react";
 import {
   useApp, canAccess, ROLE_DEFAULTS, ADMIN_ROLE_LABELS,
@@ -23,6 +24,8 @@ import { AuditTab } from "@/components/admin/AuditTab";
 import { SettingsTab } from "@/components/admin/SettingsTab";
 import { PermissionsTab } from "@/components/admin/PermissionsTab";
 import { AdministrationTab } from "@/components/admin/AdministrationTab";
+import { AssessmentTab } from "@/components/admin/AssessmentTab";
+import { BackgroundCheckTab } from "@/components/admin/BackgroundCheckTab";
 import { EmailsTab } from "@/components/admin/EmailsTab";
 
 // ─── Route ────────────────────────────────────────────────────────────────────
@@ -31,7 +34,9 @@ export const Route = createFileRoute("/admin")({
   validateSearch: z.object({
     tab: z.enum([
       "login", "dashboard", "jobs", "review-jobs", "approve-jobs", "apps",
-      "shortlisting", "interview-panel", "emails", "interns", "analytics",
+      "shortlisting", "interview-panel", "assessment-schedule", "candidate-assessment",
+      "shortlisting-ii", "background-check",
+      "emails", "interns", "analytics",
       "staff", "reports", "audit", "settings", "criteria", "permissions", "administration",
     ]).optional(),
     jobId: z.coerce.number().optional(),
@@ -50,6 +55,10 @@ const ALL_NAV = [
   { key: "apps",             label: "Applications",     Icon: FileText,         perm: "canViewApplications" as const,    group: "Recruitment" },
   { key: "shortlisting",     label: "Shortlisting",     Icon: ListChecks,       perm: "canShortlist" as const,           group: "Recruitment" },
   { key: "interview-panel",  label: "Interview Panel",  Icon: Users2,           perm: "canShortlist" as const,           group: "Recruitment" },
+  { key: "assessment-schedule", label: "Assessment Schedule", Icon: CalendarClock, perm: "canScheduleAssessment" as const, group: "Recruitment" },
+  { key: "candidate-assessment", label: "Candidate Assessment", Icon: ClipboardCheck, perm: "canRecordAssessment" as const, group: "Recruitment" },
+  { key: "shortlisting-ii",  label: "Shortlisting II",  Icon: ListChecks,       perm: "canShortlist" as const,           group: "Recruitment" },
+  { key: "background-check", label: "Background Check", Icon: ShieldCheck,      perm: "canManageBackgroundChecks" as const, group: "Recruitment" },
   { key: "interns",          label: "Interns (CGPA)",   Icon: GraduationCap,    perm: "canViewApplications" as const,    group: "Recruitment" },
   { key: "criteria",         label: "Criteria Setup",   Icon: Filter,           perm: "canManageCriteria" as const,      group: "Recruitment" },
   { key: "emails",           label: "Email Log",        Icon: Mail,             perm: "canViewApplications" as const,    group: "Recruitment" },
@@ -223,6 +232,10 @@ function AdminPage() {
           {tab === "apps"        && canAccess(role, "canViewApplications", perms) && <AppsTab jobs={jobs} applications={applications} jobId={jobId} cvStore={cvStore} updateStatus={updateApplicationStatus} bulkUpdateStatus={bulkUpdateApplicationStatus} logAction={logAction} actor={actor} criteria={criteria} role={role} perms={perms} logEmail={logEmail} bulkLogEmails={bulkLogEmails} />}
           {tab === "shortlisting" && canAccess(role, "canShortlist", perms) && <AppsTab jobs={jobs} applications={applications} jobId={jobId} cvStore={cvStore} updateStatus={updateApplicationStatus} bulkUpdateStatus={bulkUpdateApplicationStatus} logAction={logAction} actor={actor} criteria={criteria} role={role} perms={perms} logEmail={logEmail} bulkLogEmails={bulkLogEmails} initialStatusFilter="Shortlisted" />}
           {tab === "interview-panel" && canAccess(role, "canShortlist", perms) && <AppsTab jobs={jobs} applications={applications} jobId={jobId} cvStore={cvStore} updateStatus={updateApplicationStatus} bulkUpdateStatus={bulkUpdateApplicationStatus} logAction={logAction} actor={actor} criteria={criteria} role={role} perms={perms} logEmail={logEmail} bulkLogEmails={bulkLogEmails} initialStatusFilter="Interview" />}
+          {tab === "assessment-schedule" && canAccess(role, "canScheduleAssessment", perms) && <AssessmentTab jobs={jobs} applications={applications} mode="schedule" />}
+          {tab === "candidate-assessment" && canAccess(role, "canRecordAssessment", perms) && <AssessmentTab jobs={jobs} applications={applications} mode="record" />}
+          {tab === "shortlisting-ii" && canAccess(role, "canShortlist", perms) && <AppsTab jobs={jobs} applications={applications} jobId={jobId} cvStore={cvStore} updateStatus={updateApplicationStatus} bulkUpdateStatus={bulkUpdateApplicationStatus} logAction={logAction} actor={actor} criteria={criteria} role={role} perms={perms} logEmail={logEmail} bulkLogEmails={bulkLogEmails} initialStatusFilter="Assessment Complete" />}
+          {tab === "background-check" && canAccess(role, "canManageBackgroundChecks", perms) && <BackgroundCheckTab jobs={jobs} applications={applications} />}
           {tab === "emails"      && canAccess(role, "canViewApplications", perms) && <EmailsTab sentEmails={sentEmails} clearEmailLog={clearEmailLog} />}
           {tab === "interns"     && canAccess(role, "canViewApplications", perms) && <InternsTab applications={applications} jobs={jobs} actor={actor} updateStatus={updateApplicationStatus} bulkUpdateStatus={bulkUpdateApplicationStatus} canShortlist={canAccess(role, "canShortlist", perms)} logAction={logAction} />}
           {tab === "analytics"   && canAccess(role, "canViewAudit", perms) && <AnalyticsTab analyticsEvents={analyticsEvents} />}

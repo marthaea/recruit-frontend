@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import {
   Users, Briefcase, Archive, FileText, GraduationCap, Download, ClipboardList, FileDown, Filter, TrendingUp, FileSearch,
+  CalendarClock, ShieldCheck, Plane,
 } from "lucide-react";
 import {
   useApp,
@@ -9,12 +10,33 @@ import {
 } from "@/context/AppContext";
 import {
   downloadJobsReport, downloadJobRequirementsReport, downloadApplicationsReport, downloadDepartmentSummary, downloadAuditLog, downloadInternsReport, downloadStaffReport, downloadTimeToHireReport, downloadDiversityReport, downloadScreeningPassRateReport, downloadApplicantsPerClosingDateReport,
+  downloadAssessmentScheduleReport, downloadCandidateAssessmentReport, downloadBackgroundCheckReport, downloadDeploymentReport,
 } from "@/lib/admin-pdf";
-import { STAFF_DATA, fi } from "./shared";
+import { assessments as assessmentsApi, backgroundChecks as bgApi, applications as appsApi } from "@/lib/api/client";
+import { STAFF_DATA, fi, Field } from "./shared";
 
 export function ReportsTab({ jobs, applications, audit, actor, cvStore }: any) {
-  const { departments, loadDepartments } = useApp();
+  const { departments, loadDepartments, pushToast } = useApp();
   useEffect(() => { loadDepartments(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const [assessmentRows, setAssessmentRows] = useState<any[]>([]);
+  const [bgRows, setBgRows] = useState<any[]>([]);
+  useEffect(() => {
+    assessmentsApi.listAll().then((r) => { if (r.success) setAssessmentRows(r.data); }).catch(() => {});
+    bgApi.listAll().then((r) => { if (r.success) setBgRows(r.data); }).catch(() => {});
+  }, []);
+
+  const [deploying, setDeploying] = useState<Record<number, { station: string; date: string }>>({});
+  const saveDeployment = async (appId: number) => {
+    const d = deploying[appId];
+    if (!d) return;
+    try {
+      await appsApi.setDeployment(appId, { deploymentStation: d.station || undefined, deploymentDate: d.date || undefined });
+      pushToast({ type: "success", title: "Deployment saved" });
+    } catch (err) {
+      pushToast({ type: "warning", title: "Could not save deployment", message: err instanceof Error ? err.message : "Please try again." });
+    }
+  };
 
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
@@ -38,6 +60,15 @@ export function ReportsTab({ jobs, applications, audit, actor, cvStore }: any) {
   const filteredApps = applyFilters(applications);
   const filteredStaff = deptFilter ? STAFF_DATA.filter((s) => s.dept === deptFilter) : STAFF_DATA;
 
+  const jobTitleFilter = jobFilter ? jobs.find((j: any) => String(j.id) === jobFilter)?.title : undefined;
+  const filteredAssessmentRows = assessmentRows.filter((r) =>
+    (!deptFilter || r.dept === deptFilter) && (!jobTitleFilter || r.jobTitle === jobTitleFilter)
+  );
+  const filteredBgRows = bgRows.filter((r) =>
+    (!deptFilter || r.dept === deptFilter) && (!jobTitleFilter || r.jobTitle === jobTitleFilter)
+  );
+  const offeredApps = filteredApps.filter((a) => a.status === "Offered");
+
   const reports = [
     { title: "Vacancies Report",             desc: `${filteredJobs.length} job listings`,                                           Icon: Briefcase,     action: () => downloadJobsReport(filteredJobs, actor) },
     { title: "Job Requirement Report",       desc: "Qualification, experience, and salary requirements per vacancy",               Icon: FileText,      action: () => downloadJobRequirementsReport(filteredJobs, actor) },
@@ -51,6 +82,10 @@ export function ReportsTab({ jobs, applications, audit, actor, cvStore }: any) {
     { title: "Diversity Summary",            desc: "Gender breakdown of applicants based on CV data",                              Icon: Users,         action: () => downloadDiversityReport(filteredApps, cvStore, actor) },
     { title: "Screening Pass Rate",          desc: "Shortlist conversion rate per vacancy",                                        Icon: FileSearch,    action: () => downloadScreeningPassRateReport(filteredApps, filteredJobs, actor) },
     { title: "Applicants per Closing Date",  desc: "Application volume grouped by vacancy deadline",                               Icon: Archive,       action: () => downloadApplicantsPerClosingDateReport(filteredApps, filteredJobs, actor, fromDate, toDate) },
+    { title: "Assessment Schedule Report",   desc: `${filteredAssessmentRows.filter((r) => r.scheduledAt).length} scheduled assessments`, Icon: CalendarClock, action: () => downloadAssessmentScheduleReport(filteredAssessmentRows, actor) },
+    { title: "Candidate Assessment Report",  desc: `${filteredAssessmentRows.filter((r) => r.passed !== null).length} recorded results`, Icon: FileSearch,    action: () => downloadCandidateAssessmentReport(filteredAssessmentRows, actor) },
+    { title: "Candidate Background Check Report", desc: `${filteredBgRows.length} referee checks`,                                  Icon: ShieldCheck,   action: () => downloadBackgroundCheckReport(filteredBgRows, actor) },
+    { title: "Candidate Deployment Report",  desc: `${offeredApps.length} offered candidates`,                                      Icon: Plane,         action: () => downloadDeploymentReport(filteredApps, actor) },
   ];
 
   return (
@@ -110,6 +145,31 @@ export function ReportsTab({ jobs, applications, audit, actor, cvStore }: any) {
           </div>
         ))}
       </div>
+
+      {offeredApps.length > 0 && (
+        <div className="caa-card p-4">
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-caa-navy mb-3">Set candidate deployment</p>
+          <div className="space-y-2">
+            {offeredApps.map((a: Application) => {
+              const draft = deploying[a.id] ?? { station: a.deploymentStation ?? "", date: a.deploymentDate ?? "" };
+              return (
+                <div key={a.id} className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_140px_auto] gap-2 items-end border-b border-caa-border pb-2 last:border-0">
+                  <Field label={a.candidateName ?? "Candidate"}>
+                    <p className="text-xs text-caa-muted pt-1.5">{a.title}</p>
+                  </Field>
+                  <Field label="Deployment station">
+                    <input className={fi} value={draft.station} onChange={(e) => setDeploying((d) => ({ ...d, [a.id]: { ...draft, station: e.target.value } }))} placeholder="e.g. Entebbe International Airport" />
+                  </Field>
+                  <Field label="Reporting date">
+                    <input type="date" className={fi} value={draft.date} onChange={(e) => setDeploying((d) => ({ ...d, [a.id]: { ...draft, date: e.target.value } }))} />
+                  </Field>
+                  <button onClick={() => saveDeployment(a.id)} className="px-3 py-1.5 text-xs font-semibold bg-caa-navy text-white rounded-md">Save</button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

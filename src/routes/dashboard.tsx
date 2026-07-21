@@ -23,6 +23,10 @@ const STATUS: Record<Application["status"], string> = {
   Pending:        "bg-caa-warning/15 text-caa-warning",
   Declined:       "bg-caa-danger/10 text-caa-danger",
   Interview:      "bg-purple-100 text-purple-700",
+  "Assessment Scheduled": "bg-sky-100 text-sky-700",
+  "Assessment Complete":  "bg-indigo-100 text-indigo-700",
+  "Shortlisted II":       "bg-teal-100 text-teal-700",
+  "Background Check":     "bg-fuchsia-100 text-fuchsia-700",
   Offered:        "bg-teal-100 text-teal-700",
 };
 
@@ -30,9 +34,13 @@ const NOTIF_ICON: Record<string, string> = {
   shortlisted: "✅", declined: "❌", interview: "📅", offered: "🎉", info: "ℹ️",
 };
 
-const PIPE_STEPS = ["Applied", "Shortlisted", "Interview", "Offered"] as const;
+// The 4 internal Assessment-stage statuses collapse into a single "Assessment"
+// dot here — candidates get an honest, simpler view than HR's detailed pipeline.
+const PIPE_STEPS = ["Applied", "Shortlisted", "Interview", "Assessment", "Offered"] as const;
 const PIPE_INDEX: Record<Application["status"], number> = {
-  Pending: 0, "Under Review": 0, Shortlisted: 1, Interview: 2, Offered: 3, Declined: -1,
+  Pending: 0, "Under Review": 0, Shortlisted: 1, Interview: 2,
+  "Assessment Scheduled": 3, "Assessment Complete": 3, "Shortlisted II": 3, "Background Check": 3,
+  Offered: 4, Declined: -1,
 };
 
 function AppPipeline({ status }: { status: Application["status"] }) {

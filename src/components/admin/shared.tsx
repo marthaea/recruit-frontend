@@ -24,7 +24,10 @@ export const STAFF_DATA: StaffRecord[] = Object.entries(CAA_STAFF).map(([empNo, 
 
 export const STATUS_COLORS: Record<string, string> = {
   Pending: "#f59e0b", "Under Review": "#3b82f6", Shortlisted: "#10b981",
-  Interview: "#8b5cf6", Offered: "#0d9488", Declined: "#ef4444",
+  Interview: "#8b5cf6",
+  "Assessment Scheduled": "#0ea5e9", "Assessment Complete": "#6366f1",
+  "Shortlisted II": "#14b8a6", "Background Check": "#a855f7",
+  Offered: "#0d9488", Declined: "#ef4444",
 };
 
 export function AnimatedSection({ children, delay = 0, className = "" }: { children: React.ReactNode; delay?: number; className?: string }) {
@@ -73,6 +76,26 @@ export function buildEmail(status: string, candidateName: string, jobTitle: stri
       return {
         subject: `Invitation for Oral Interview — ${jobTitle} | ${ref}`,
         body: `Dear ${candidateName},\n\nFollowing a successful review of your application for the position of ${jobTitle}, we are pleased to invite you for an Oral Interview with the Uganda Civil Aviation Authority.\n\nInterview scheduling details will be communicated to you separately. Please confirm your availability by responding to this email within three (3) working days.\n\nKindly come prepared with:\n  • Original academic certificates and transcripts\n  • National Identity Card (NIN)\n  • Two recent passport-size photographs\n  • A copy of your submitted application${sign}`,
+      };
+    case "Assessment Scheduled":
+      return {
+        subject: `Assessment Scheduled — ${jobTitle} | ${ref}`,
+        body: `Dear ${candidateName},\n\nFollowing your oral interview for the position of ${jobTitle}, you have been scheduled for the next stage of assessment.\n\nDetails of the date, time, and venue will be communicated to you separately. Please ensure you are available and come prepared as instructed.${sign}`,
+      };
+    case "Assessment Complete":
+      return {
+        subject: `Assessment Completed — ${jobTitle} | ${ref}`,
+        body: `Dear ${candidateName},\n\nThank you for completing your assessment for the position of ${jobTitle}. Your results are now being reviewed by the selection panel.\n\nYou will be notified of the outcome in due course. Please log in to the UCAA e-Recruitment Portal to track your application status.${sign}`,
+      };
+    case "Shortlisted II":
+      return {
+        subject: `Further Shortlisting Notification — ${jobTitle} | ${ref}`,
+        body: `Dear ${candidateName},\n\nFollowing a review of your assessment results for the position of ${jobTitle}, we are pleased to inform you that you have been shortlisted to proceed to the next stage of our selection process.\n\nYou will be contacted shortly with further details.${sign}`,
+      };
+    case "Background Check":
+      return {
+        subject: `Background Verification in Progress — ${jobTitle} | ${ref}`,
+        body: `Dear ${candidateName},\n\nAs part of the final stage of our selection process for the position of ${jobTitle}, the Uganda Civil Aviation Authority is now conducting background and reference verification.\n\nWe may contact the referees provided in your application. No action is required from you at this time.${sign}`,
       };
     case "Offered":
       return {

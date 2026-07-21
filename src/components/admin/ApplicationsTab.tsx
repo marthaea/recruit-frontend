@@ -24,8 +24,15 @@ export function AppsTab({ jobs, applications, jobId, cvStore, updateStatus, bulk
   const displayed = statusFilter === "all" ? filtered : filtered.filter((a: Application) => a.status === statusFilter);
 
   // ── Kanban board ────────────────────────────────────────────────────────────
-  const BOARD_COLUMNS: ApplicationStatus[] = ["Pending", "Under Review", "Shortlisted", "Interview", "Offered", "Declined"];
-  const NOTIFY_STATUSES: ApplicationStatus[] = ["Shortlisted", "Interview", "Offered", "Declined"];
+  const BOARD_COLUMNS: ApplicationStatus[] = [
+    "Pending", "Under Review", "Shortlisted", "Interview",
+    "Assessment Scheduled", "Assessment Complete", "Shortlisted II", "Background Check",
+    "Offered", "Declined",
+  ];
+  const NOTIFY_STATUSES: ApplicationStatus[] = [
+    "Shortlisted", "Interview", "Assessment Scheduled", "Assessment Complete",
+    "Shortlisted II", "Background Check", "Offered", "Declined",
+  ];
   const canMove = canAccess(role, "canShortlist", perms);
 
   const handleBoardDrop = (e: React.DragEvent, status: ApplicationStatus) => {
