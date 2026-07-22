@@ -1,7 +1,16 @@
 // Central API client — all backend calls go through here.
 // See docs/07-frontend-integration.md in the backend repo for full integration guide.
 
-const BASE = (import.meta.env.VITE_API_URL as string) ?? "http://localhost:5000/api";
+// Production builds always go through this site's own /api/* path (proxied
+// to the Render backend by netlify.toml) rather than the cross-origin Render
+// URL directly — a cross-site refresh-token cookie only works if the browser
+// still allows third-party cookies, which Chrome increasingly does not. This
+// intentionally ignores VITE_API_URL in production even if it's set to the
+// absolute backend URL; that env var only matters for local dev, where the
+// frontend and backend are on different localhost ports without this issue.
+const BASE = import.meta.env.PROD
+  ? "/api"
+  : (import.meta.env.VITE_API_URL as string) ?? "http://localhost:5000/api";
 
 // Access token lives in memory only — never in localStorage, where any XSS
 // could read it. Sessions survive page reloads via the httpOnly refresh
