@@ -801,6 +801,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try { localStorage.setItem(JOBS_KEY, JSON.stringify(jobs)); } catch {}
   }, [jobs]);
 
+  // Real applications/notifications/permissions were previously only ever
+  // fetched inside apiSignIn/apiRegister — i.e. only at the moment someone
+  // types credentials into the login form. Every other case that leaves an
+  // admin "logged in" (a page reload, or opening a new tab, both restoring
+  // the session from the httpOnly refresh cookie via restoreSession() above)
+  // never re-fetched them, so the admin console silently fell back to
+  // whatever was last cached in localStorage — or, for a browser that never
+  // had that cache, the original hardcoded demo seed data, whose job IDs
+  // don't match any real job. That's why Applications could show 0 even
+  // with real applications in the database: the count was being computed
+  // against stale/demo rows, not the ones the backend actually has.
+  useEffect(() => {
+    if (sessionRestoring || !auth.isLoggedIn || auth.accountType !== "admin") return;
+    appsApi.list().then(r => { if (r.success) persistApps(r.data as unknown as Application[]); }).catch(() => {});
+    notifApi.list().then(r => { if (r.success) persistNotifs(r.data as unknown as Notification[]); }).catch(() => {});
+    permissionsApi.roleDefaults().then(r => { if (r.success) setRoleDefaults(r.data.defaults as Record<AdminRole, Partial<PermissionOverride>>); }).catch(() => {});
+    permissionsApi.list().then(r => {
+      if (r.success) {
+        const data = r.data as unknown as PermissionOverride[];
+        setPermissionOverrides(data);
+        try { localStorage.setItem(PERMS_KEY, JSON.stringify(data)); } catch {}
+      }
+    }).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionRestoring, auth.isLoggedIn, auth.accountType]);
+
   // A local-only session (e.g. the demo admin shortcut, which sets isLoggedIn
   // without ever obtaining a real backend token) looks "logged in" here but
   // has nothing to authenticate with. The first real API call it makes gets
