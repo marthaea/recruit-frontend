@@ -1,17 +1,20 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   AlertCircle, FileText, Download, ClipboardList, ChevronRight, FileDown, RefreshCw, CheckCircle2, XCircle, Eye, FileSearch, ExternalLink,
-  LayoutGrid, List,
+  LayoutGrid, List, CheckSquare, Square, Archive,
 } from "lucide-react";
 import {
-  canAccess, type Job, type Application, type ApplicationStatus, type JobCriteria,
+  useApp, canAccess, type Job, type Application, type ApplicationStatus, type JobCriteria,
 } from "@/context/AppContext";
 import {
-  downloadScreeningReport, downloadOfferLetter, downloadCandidateCv, type ScreeningReportEntry,
+  downloadScreeningReport, downloadOfferLetter, downloadCandidateCv, downloadCandidateCvsZip, type ScreeningReportEntry,
 } from "@/lib/admin-pdf";
+import { applications as appsApi } from "@/lib/api/client";
 import { buildEmail, autoQualify, STATUS_COLORS, fi, EmptyState, type ScreeningResult } from "./shared";
 
-export function AppsTab({ jobs, applications, jobId, cvStore, updateStatus, bulkUpdateStatus, logAction, actor, criteria, role, perms, logEmail, bulkLogEmails, initialStatusFilter }: any) {
+export function AppsTab({ jobs, applications, jobId, cvStore, updateStatus, bulkUpdateStatus, logAction, actor, criteria, role, perms, logEmail, bulkLogEmails, initialStatusFilter, onSelectJob, onClearJob }: any) {
+  const { pushToast, loadCvsForEmails } = useApp();
+  const [viewingAll, setViewingAll] = useState(false);
   const filtered = jobId ? applications.filter((a: Application) => a.jobId === jobId) : applications;
   const job = jobs.find((j: Job) => j.id === jobId);
   const [selected, setSelected] = useState<Application | null>(null);
@@ -20,18 +23,80 @@ export function AppsTab({ jobs, applications, jobId, cvStore, updateStatus, bulk
   const [isProcessing, setIsProcessing] = useState(false);
   const [view, setView] = useState<"table" | "board">("table");
   const [dragOverCol, setDragOverCol] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [downloadingCvs, setDownloadingCvs] = useState(false);
+  const [exportingCsv, setExportingCsv] = useState(false);
 
   const displayed = statusFilter === "all" ? filtered : filtered.filter((a: Application) => a.status === statusFilter);
 
+  // cvStore was previously only ever populated from 2 hardcoded demo profiles
+  // plus whatever CV the CURRENT browser session happened to save — meaning a
+  // real admin almost never actually saw a real candidate's CV data (and
+  // autoQualify() silently fell back to its fake demo-simulation path
+  // instead of evaluating it). Fetch on demand for whichever candidates are
+  // currently visible — only once scoped to a single job (jobId set), never
+  // on the flat cross-job list, which can be hundreds of applications and
+  // would fire that many simultaneous requests.
+  useEffect(() => {
+    if (!jobId) return;
+    const emails = displayed.map((a: Application) => a.candidateEmail).filter(Boolean);
+    if (emails.length > 0) loadCvsForEmails(emails);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobId, displayed.map((a: Application) => a.candidateEmail).join(',')]);
+
+  // Job-picker landing — only for the plain "Applications" entry point (no
+  // specific job, no forced status filter like Shortlisting/Interview Panel).
+  // Previously this showed every application across every job in one flat
+  // list with no way to scope down except the status pills.
+  const showJobPicker = !jobId && !initialStatusFilter && !viewingAll && !!onSelectJob;
+  if (showJobPicker) {
+    return (
+      <div className="space-y-3">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <h1 className="font-bold text-xl text-caa-body">Applications</h1>
+            <p className="text-xs text-caa-muted mt-0.5">Select a vacancy to review its applications.</p>
+          </div>
+          <button onClick={() => setViewingAll(true)} className="text-xs font-semibold text-caa-navy hover:underline">
+            View all applications across every job →
+          </button>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {jobs.map((j: Job) => {
+            const count = applications.filter((a: Application) => a.jobId === j.id).length;
+            const isClosed = (j.status && j.status !== "published") || new Date(j.closesAt) < new Date();
+            return (
+              <button
+                key={j.id}
+                onClick={() => onSelectJob(j.id)}
+                className="caa-card p-4 text-left hover:border-caa-navy transition-colors"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <p className="font-semibold text-sm text-caa-body">{j.title}</p>
+                  <span className={`shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${isClosed ? "bg-caa-muted/15 text-caa-muted" : "bg-caa-success/10 text-caa-success"}`}>
+                    {isClosed ? <Archive className="h-3 w-3" /> : null}{isClosed ? "Closed" : "Active"}
+                  </span>
+                </div>
+                <p className="text-[11px] text-caa-muted mt-1">{j.dept}</p>
+                <p className="text-xs font-semibold text-caa-navy mt-2">{count} application{count !== 1 ? "s" : ""}</p>
+              </button>
+            );
+          })}
+          {jobs.length === 0 && <p className="text-xs text-caa-muted">No job listings yet.</p>}
+        </div>
+      </div>
+    );
+  }
+
   // ── Kanban board ────────────────────────────────────────────────────────────
   const BOARD_COLUMNS: ApplicationStatus[] = [
-    "Pending", "Under Review", "Shortlisted", "Interview",
-    "Assessment Scheduled", "Assessment Complete", "Shortlisted II", "Background Check",
+    "Pending", "Under Review", "Shortlisted", "Shortlisted II", "Interview",
+    "Assessment Scheduled", "Assessment Complete",
     "Offered", "Declined",
   ];
   const NOTIFY_STATUSES: ApplicationStatus[] = [
-    "Shortlisted", "Interview", "Assessment Scheduled", "Assessment Complete",
-    "Shortlisted II", "Background Check", "Offered", "Declined",
+    "Shortlisted", "Shortlisted II", "Interview", "Assessment Scheduled", "Assessment Complete",
+    "Offered", "Declined",
   ];
   const canMove = canAccess(role, "canShortlist", perms);
 
@@ -127,26 +192,58 @@ export function AppsTab({ jobs, applications, jobId, cvStore, updateStatus, bulk
 
   const eligible = filtered.filter((a: Application) => a.status === "Pending" || a.status === "Under Review");
 
-  const exportCsv = () => {
+  // Pulls straight from the database (server-side, up to 5000 rows) rather
+  // than the `applications` already loaded into the frontend — the list
+  // endpoint that populates that array caps at 500, so a purely client-side
+  // export silently truncated for any org with more applications than that.
+  const exportCsv = async () => {
     const label = statusFilter === "all" ? "all" : statusFilter.toLowerCase().replace(/\s+/g, "-");
-    const rows: (string | number)[][] = [
-      ["ID", "Candidate Name", "Email", "Role", "Department", "Date Submitted", "Status", "Completion %"],
-      ...displayed.map((a: Application) => [
-        a.id, a.candidateName ?? "", a.candidateEmail ?? "", a.title, a.dept, a.date, a.status, a.completion,
-      ]),
-    ];
-    const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
-    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = `caa-applications-${label}-${Date.now()}.csv`; a.click();
-    URL.revokeObjectURL(url);
+    setExportingCsv(true);
+    try {
+      await appsApi.exportCsv(
+        { jobId: jobId ?? undefined, status: statusFilter !== "all" ? statusFilter : undefined },
+        `caa-applications-${label}-${Date.now()}.csv`,
+      );
+    } catch (err) {
+      pushToast({ type: "warning", title: "Export failed", message: err instanceof Error ? err.message : "Please try again." });
+    } finally {
+      setExportingCsv(false);
+    }
+  };
+
+  const toggleSelected = (id: number) => setSelectedIds((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
+  const toggleSelectAllDisplayed = () => setSelectedIds((prev) => {
+    const allSelected = displayed.length > 0 && displayed.every((a: Application) => prev.has(a.id));
+    return allSelected ? new Set() : new Set(displayed.map((a: Application) => a.id));
+  });
+
+  const downloadSelectedCvs = async () => {
+    const selectedApps = displayed.filter((a: Application) => selectedIds.has(a.id));
+    const withCv = selectedApps.filter((a: Application) => cvStore[a.candidateEmail?.toLowerCase() ?? ""]);
+    if (withCv.length === 0) {
+      pushToast({ type: "warning", title: "No CVs to download", message: "None of the selected candidates have a CV on file." });
+      return;
+    }
+    setDownloadingCvs(true);
+    try {
+      await downloadCandidateCvsZip(
+        withCv.map((a: Application) => ({ cv: cvStore[a.candidateEmail!.toLowerCase()], app: a })),
+        actor,
+      );
+    } finally {
+      setDownloadingCvs(false);
+    }
   };
 
   return (
     <div className="space-y-3">
       <div className="flex items-start justify-between gap-3 flex-wrap">
-        <h1 className="font-bold text-xl text-caa-body">{job ? `Applications — ${job.title}` : "All Applications"}</h1>
+        <div>
+          {jobId && onClearJob && !initialStatusFilter && (
+            <button onClick={onClearJob} className="text-[11px] font-semibold text-caa-navy hover:underline mb-1 block">← All vacancies</button>
+          )}
+          <h1 className="font-bold text-xl text-caa-body">{job ? `Applications — ${job.title}` : "All Applications"}</h1>
+        </div>
         <div className="flex items-center gap-2 flex-wrap">
           {/* Table / Board view toggle */}
           <div className="flex rounded-md border border-caa-border overflow-hidden">
@@ -167,10 +264,20 @@ export function AppsTab({ jobs, applications, jobId, cvStore, updateStatus, bulk
           </div>
           <button
             onClick={exportCsv}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border border-caa-border text-caa-body rounded-md hover:border-caa-navy hover:text-caa-navy"
+            disabled={exportingCsv}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border border-caa-border text-caa-body rounded-md hover:border-caa-navy hover:text-caa-navy disabled:opacity-60"
           >
-            <FileDown className="h-3.5 w-3.5" /> Export CSV {statusFilter !== "all" && `(${displayed.length})`}
+            {exportingCsv ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />} {exportingCsv ? "Exporting…" : "Export CSV"}
           </button>
+          {selectedIds.size > 0 && (
+            <button
+              onClick={downloadSelectedCvs}
+              disabled={downloadingCvs}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-caa-navy text-white rounded-md disabled:opacity-60"
+            >
+              {downloadingCvs ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />} {downloadingCvs ? "Zipping…" : `Download ${selectedIds.size} selected CV${selectedIds.size !== 1 ? "s" : ""}`}
+            </button>
+          )}
           {canAccess(role, "canShortlist", perms) && (
             eligible.length > 0 ? (
               <button
@@ -392,11 +499,22 @@ export function AppsTab({ jobs, applications, jobId, cvStore, updateStatus, bulk
       <div className="caa-card overflow-x-auto">
         <table className="w-full min-w-[640px] text-sm">
           <thead className="bg-caa-surface text-xs text-caa-muted">
-            <tr><th className="text-left p-3">Candidate</th><th className="text-left p-3">Role</th><th className="text-left p-3">Submitted</th><th className="text-left p-3">Status</th><th className="text-left p-3">Completion</th><th className="text-right p-3">Actions</th></tr>
+            <tr>
+              <th className="text-left p-3 w-8">
+                <button onClick={toggleSelectAllDisplayed} title="Select all">
+                  {displayed.length > 0 && displayed.every((a: Application) => selectedIds.has(a.id)) ? <CheckSquare className="h-4 w-4 text-caa-navy" /> : <Square className="h-4 w-4 text-caa-muted" />}
+                </button>
+              </th>
+              <th className="text-left p-3">Candidate</th><th className="text-left p-3">Role</th><th className="text-left p-3">Submitted</th><th className="text-left p-3">Status</th><th className="text-left p-3">Completion</th><th className="text-right p-3">Actions</th></tr>
           </thead>
           <tbody className="divide-y divide-caa-border">
             {displayed.map((a: Application) => (
               <tr key={a.id} className="hover:bg-caa-surface/50 cursor-pointer" onClick={() => setSelected(a)}>
+                <td className="p-3" onClick={(e) => e.stopPropagation()}>
+                  <button onClick={() => toggleSelected(a.id)}>
+                    {selectedIds.has(a.id) ? <CheckSquare className="h-4 w-4 text-caa-navy" /> : <Square className="h-4 w-4 text-caa-muted" />}
+                  </button>
+                </td>
                 <td className="p-3"><p className="font-medium text-caa-body">{a.candidateName ?? "Candidate"}</p><p className="text-[11px] text-caa-muted">{a.candidateEmail ?? "—"}</p></td>
                 <td className="p-3 text-xs text-caa-muted">{a.title}</td>
                 <td className="p-3 text-xs">{a.date}</td>
@@ -415,7 +533,7 @@ export function AppsTab({ jobs, applications, jobId, cvStore, updateStatus, bulk
               </tr>
             ))}
             {displayed.length === 0 && (
-              <tr><td colSpan={6}>
+              <tr><td colSpan={7}>
                 <EmptyState
                   icon={<FileText />}
                   title={statusFilter === "all" ? "No applications yet" : `No ${statusFilter.toLowerCase()} applications`}

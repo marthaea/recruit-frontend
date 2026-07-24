@@ -129,6 +129,30 @@ const put  = <T>(path: string, body?: unknown) => request<T>("PUT", path, body);
 const del  = <T>(path: string) => request<T>("DELETE", path);
 const upload = <T>(path: string, form: FormData) => request<T>("POST", path, form, true);
 
+function triggerBlobDownload(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+/** For endpoints that return a raw file (e.g. CSV) instead of the usual JSON
+ *  envelope — everything else in this client assumes JSON, so this bypasses
+ *  request() entirely rather than teaching it a second response shape. */
+export async function downloadFile(path: string, filename: string): Promise<void> {
+  const headers: Record<string, string> = {};
+  if (_token) headers["Authorization"] = `Bearer ${_token}`;
+  let res = await fetch(`${BASE}${path}`, { method: "GET", headers, credentials: "include" });
+  if (res.status === 401) {
+    const refreshed = await tryRefresh();
+    if (!refreshed) { setToken(null); _onSessionExpired?.(); throw new Error("Session expired"); }
+    headers["Authorization"] = `Bearer ${_token}`;
+    res = await fetch(`${BASE}${path}`, { method: "GET", headers, credentials: "include" });
+  }
+  if (!res.ok) throw await apiError(res);
+  triggerBlobDownload(await res.blob(), filename);
+}
+
 // ── Auth ──────────────────────────────────────────────────────────────────────
 export const auth = {
   register: (data: {
@@ -197,14 +221,17 @@ export const applications = {
   setDeployment: (id: number, data: { deploymentStation?: string; deploymentDate?: string }) =>
     put<ApiResponse<Application>>(`/applications/${id}/deployment`, data),
 
-  // Returns a URL for direct browser navigation (triggers file download)
-  exportUrl: (params?: { jobId?: number; status?: string }) => {
+  // Server-side CSV export — pulls directly from the database (up to 5000
+  // rows) rather than whatever page of `applications` happens to be loaded
+  // into the frontend context (capped at 500 by the list endpoint's default),
+  // so large result sets no longer export silently truncated.
+  exportCsv: (params?: { jobId?: number; status?: string; fromDate?: string; toDate?: string }, filename = `applications-${Date.now()}.csv`) => {
     const qs = params
       ? "?" + new URLSearchParams(
           Object.entries(params).filter(([, v]) => v != null) as [string, string][]
         ).toString()
       : "";
-    return `${BASE}/applications/export${qs}`;
+    return downloadFile(`/applications/export${qs}`, filename);
   },
 };
 
@@ -290,10 +317,36 @@ export interface ChatbotQuery {
 }
 
 // ── Criteria ──────────────────────────────────────────────────────────────────
+export interface PublicJobCriteria {
+  requirements: { id: string; kind: string; label: string; mandatory: boolean; usage: string }[];
+  screeningQuestions: unknown[];
+}
+
 export const criteria = {
   get: (jobId: number) => get<ApiResponse<JobCriteria>>(`/criteria/${jobId}`),
   save: (jobId: number, data: Partial<JobCriteria>) =>
     put<ApiResponse<JobCriteria>>(`/criteria/${jobId}`, data),
+  /** Public, candidate-safe subset — no auth required. */
+  getPublic: (jobId: number) => get<ApiResponse<PublicJobCriteria>>(`/criteria/${jobId}/public`),
+};
+
+// ── Candidate panel scoring ─────────────────────────────────────────────────
+export interface CandidateScoreEntry {
+  id: number; applicationId: number; scorerUserId: number; scorerName: string; scorerEmail: string;
+  score: number; comment: string | null; updatedAt: string;
+}
+export interface CandidateScoreSummary {
+  applicationId: number; candidateName: string; candidateEmail: string; status: string;
+  scores: CandidateScoreEntry[]; average: number | null;
+}
+
+export const candidateScores = {
+  summary: (params: { jobId: number; status?: string }) =>
+    get<ListResponse<CandidateScoreSummary>>(`/candidate-scores?${new URLSearchParams(
+      Object.entries(params).filter(([, v]) => v != null) as [string, string][]
+    ).toString()}`),
+  save: (applicationId: number, data: { score: number; comment?: string }) =>
+    put<ApiResponse<CandidateScoreEntry>>(`/candidate-scores/${applicationId}`, data),
 };
 
 // ── Departments ───────────────────────────────────────────────────────────────
@@ -308,6 +361,23 @@ export const departments = {
   list: () => get<ListResponse<Department>>("/departments"),
   create: (data: { name: string; code: string }) => post<ApiResponse<Department>>("/departments", data),
   assignHead: (id: number, headUserId: number | null) => put<ApiResponse<Department>>(`/departments/${id}`, { headUserId }),
+};
+
+// ── Job templates ────────────────────────────────────────────────────────────
+export interface JobTemplate {
+  id: number;
+  name: string;
+  departmentId: number | null;
+  sourceJobId: number | null;
+  content: Record<string, unknown>;
+  createdAt?: string;
+}
+
+export const jobTemplates = {
+  list: () => get<ListResponse<JobTemplate>>("/job-templates"),
+  create: (data: { name: string; departmentId?: number | null; sourceJobId?: number | null; content: Record<string, unknown> }) =>
+    post<ApiResponse<JobTemplate>>("/job-templates", data),
+  delete: (id: number) => del<ApiResponse<{ message: string }>>(`/job-templates/${id}`),
 };
 
 // ── Admin users (Administration section) ───────────────────────────────────────
@@ -346,29 +416,6 @@ export const assessments = {
     put<ApiResponse<Assessment>>(`/assessments/${applicationId}/${type}`, data),
   record: (applicationId: number, type: AssessmentKind, data: { score?: number; passed: boolean; notes?: string }) =>
     put<ApiResponse<Assessment>>(`/assessments/${applicationId}/${type}`, data),
-};
-
-// ── Background checks ────────────────────────────────────────────────────────
-export type BackgroundCheckStatus = "pending" | "contacted" | "verified" | "could_not_reach" | "declined_to_confirm";
-export interface BackgroundCheck {
-  id: number;
-  applicationId: number;
-  refereeIndex: number;
-  refereeName: string | null;
-  refereeEmail: string | null;
-  refereePhone: string | null;
-  status: BackgroundCheckStatus;
-  notes: string | null;
-  contactedAt: string | null;
-}
-
-export const backgroundChecks = {
-  list: (applicationId: number) => get<ListResponse<BackgroundCheck>>(`/background-checks/${applicationId}`),
-  listAll: () => get<ListResponse<BackgroundCheck & { candidateName: string; jobTitle: string; dept: string }>>("/background-checks"),
-  init: (applicationId: number) => post<ListResponse<BackgroundCheck>>(`/background-checks/${applicationId}/init`, {}),
-  update: (id: number, data: { status?: BackgroundCheckStatus; notes?: string }) =>
-    put<ApiResponse<BackgroundCheck>>(`/background-checks/${id}`, data),
-  sendEmail: (id: number) => post<ApiResponse<BackgroundCheck>>(`/background-checks/${id}/send-email`, {}),
 };
 
 // ── Permissions ───────────────────────────────────────────────────────────────

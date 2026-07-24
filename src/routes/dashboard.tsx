@@ -26,7 +26,6 @@ const STATUS: Record<Application["status"], string> = {
   "Assessment Scheduled": "bg-sky-100 text-sky-700",
   "Assessment Complete":  "bg-indigo-100 text-indigo-700",
   "Shortlisted II":       "bg-teal-100 text-teal-700",
-  "Background Check":     "bg-fuchsia-100 text-fuchsia-700",
   Offered:        "bg-teal-100 text-teal-700",
 };
 
@@ -38,8 +37,11 @@ const NOTIF_ICON: Record<string, string> = {
 // dot here — candidates get an honest, simpler view than HR's detailed pipeline.
 const PIPE_STEPS = ["Applied", "Shortlisted", "Interview", "Assessment", "Offered"] as const;
 const PIPE_INDEX: Record<Application["status"], number> = {
-  Pending: 0, "Under Review": 0, Shortlisted: 1, Interview: 2,
-  "Assessment Scheduled": 3, "Assessment Complete": 3, "Shortlisted II": 3, "Background Check": 3,
+  // Shortlisted II now sits between Shortlisted and Interview (CV-scoring stage)
+  // — kept in the "Shortlisted" dot here since the candidate-facing pipeline
+  // doesn't break out that level of detail.
+  Pending: 0, "Under Review": 0, Shortlisted: 1, "Shortlisted II": 1, Interview: 2,
+  "Assessment Scheduled": 3, "Assessment Complete": 3,
   Offered: 4, Declined: -1,
 };
 

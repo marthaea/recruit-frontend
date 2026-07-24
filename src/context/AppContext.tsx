@@ -1,8 +1,9 @@
-import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, useCallback, useRef, ReactNode } from "react";
 import {
   auth as authApi, jobs as jobsApi, applications as appsApi,
   notifications as notifApi, settings as settingsApi,
   cv as cvApi, criteria as criteriaApi, departments as departmentsApi, permissions as permissionsApi,
+  jobTemplates as jobTemplatesApi,
   setToken, restoreSession, setSessionExpiredHandler,
   type UserResponse, type Department,
 } from "@/lib/api/client";
@@ -12,12 +13,16 @@ import {
 export type Visibility = "external" | "internal";
 export type QualLevel = "O-Level" | "A-Level" | "Certificate" | "Diploma" | "Degree" | "Masters" | "PhD";
 export type ApplicationStatus =
-  | "Pending" | "Under Review" | "Shortlisted" | "Interview"
-  | "Assessment Scheduled" | "Assessment Complete" | "Shortlisted II" | "Background Check"
+  | "Pending" | "Under Review" | "Shortlisted" | "Shortlisted II" | "Interview"
+  | "Assessment Scheduled" | "Assessment Complete"
   | "Offered" | "Declined";
+// Shortlisted II sits between Shortlisted and Interview — it's the CV-scoring
+// stage (see candidate_scores / CandidateScoringPanel), not a second round of
+// assessment. It used to sit after Assessment Complete; repositioned here to
+// match how it's actually used.
 export const APPLICATION_STATUSES: ApplicationStatus[] = [
-  "Pending", "Under Review", "Shortlisted", "Interview",
-  "Assessment Scheduled", "Assessment Complete", "Shortlisted II", "Background Check",
+  "Pending", "Under Review", "Shortlisted", "Shortlisted II", "Interview",
+  "Assessment Scheduled", "Assessment Complete",
   "Offered", "Declined",
 ];
 export type AdminRole = "super" | "hr" | "recruiter" | "auditor" | "hr_officer" | "it_admin" | "dhra" | "hod";
@@ -28,6 +33,7 @@ export const ADMIN_ROLE_LABELS: Record<AdminRole, string> = {
   dhra: "DHRA (Director HR & Administration)", hod: "Head of Department",
 };
 export type AuditEntry = { id: number; at: string; actor: string; role: string; action: string; target?: string };
+export type JobTemplate = { id: number; name: string; departmentId?: number | null; sourceJobId?: number | null; content: Record<string, unknown>; createdAt?: string };
 export type AdminSettings = {
   minAgeThreshold: number;
   allowExternalInternalJobs: boolean;
@@ -84,6 +90,33 @@ export type ScreeningQuestion = {
   max?: number;
 };
 
+// ─── Structured requirement builder ───────────────────────────────────────────
+// HR picks a requirement kind + value, marks it essential or desirable, and —
+// for essential items — whether it becomes a candidate-facing qualifier/
+// disqualifier question or stays a silent, backend-only criterion. Replaces
+// free-text requirements as the primary way essential/desirable lists on a
+// job are built (the older free-text fields below remain as a fallback).
+export type RequirementKind =
+  | "minAge" | "maxAge" | "flyingHours" | "experienceYears" | "sex"
+  | "qualificationLevel" | "specificDegree" | "oLevelSubject" | "aLevelSubject" | "custom";
+export type RequirementUsage = "qualifier" | "disqualifier" | "criteriaOnly";
+export type JobRequirement = {
+  id: string;
+  kind: RequirementKind;
+  /** Human-readable sentence, auto-generated from kind+value but editable. */
+  label: string;
+  numberValue?: number;
+  textValue?: string;
+  gradeValue?: string;
+  /** Ignored (treated as "criteriaOnly") for desirable (mandatory: false) items — a
+   *  desirable item is never a hard disqualifier. */
+  usage: RequirementUsage;
+  /** true = essential requirement; false = desirable (bonus, non-mandatory). */
+  mandatory: boolean;
+  /** Links this requirement to its auto-generated ScreeningQuestion (same id), if any. */
+  questionId?: string;
+};
+
 export type JobCriteria = {
   jobId: number;
   minCgpa?: number;
@@ -94,6 +127,7 @@ export type JobCriteria = {
   requiredQualLevel?: QualLevel;
   disqualifyingUniversities?: string[];
   assessmentTypes?: AssessmentType[];
+  requirements?: JobRequirement[];
 };
 
 export const ASSESSMENT_TYPES = ["Written", "Oral Interview", "Practical Test"] as const;
@@ -120,7 +154,6 @@ export type PermissionOverride = {
   canAssignRights: boolean;
   canScheduleAssessment: boolean;
   canRecordAssessment: boolean;
-  canManageBackgroundChecks: boolean;
 };
 
 // ─── RBAC ─────────────────────────────────────────────────────────────────────
@@ -137,14 +170,14 @@ export let ROLE_DEFAULTS: Record<AdminRole, Partial<PermissionOverride>> = {
     canScreenInterns: true, canSendNotifications: true,
     canReviewJob: true, canApproveJob: true, canManageDepartments: true,
     canManageAdmins: true, canAssignRights: true,
-    canScheduleAssessment: true, canRecordAssessment: true, canManageBackgroundChecks: true,
+    canScheduleAssessment: true, canRecordAssessment: true,
   },
   hr: {
     canViewAudit: false, canManageJobs: true, canExport: true, canViewStaff: true,
     canManageSettings: false, canGrantPermissions: false, canManageCriteria: true,
     canShortlist: true, canViewApplications: true,
     canScreenInterns: true, canSendNotifications: true,
-    canScheduleAssessment: true, canManageBackgroundChecks: true,
+    canScheduleAssessment: true,
   },
   recruiter: {
     canViewAudit: false, canManageJobs: false, canExport: false, canViewStaff: false,
@@ -156,13 +189,13 @@ export let ROLE_DEFAULTS: Record<AdminRole, Partial<PermissionOverride>> = {
   hr_officer: {
     canViewApplications: true, canShortlist: true, canManageJobs: true,
     canManageCriteria: true, canSendNotifications: true,
-    canScheduleAssessment: true, canManageBackgroundChecks: true,
+    canScheduleAssessment: true,
   },
   it_admin: { canAssignRights: true },
   dhra: {
     canViewApplications: true, canShortlist: true, canApproveJob: true,
     canExport: true, canViewAudit: true,
-    canScheduleAssessment: true, canRecordAssessment: true, canManageBackgroundChecks: true,
+    canScheduleAssessment: true, canRecordAssessment: true,
   },
   hod: { canViewApplications: true, canShortlist: true, canReviewJob: true, canRecordAssessment: true },
 };
@@ -191,11 +224,22 @@ export const JOB_STATUS_LABELS: Record<JobStatus, string> = {
 export type Job = {
   id: number; abbr: string; title: string; dept: string; deptKey: string;
   location: string; salary: string; salaryBand: string;
-  type: "Full-time" | "Contract";
-  closes: string; closesAt: string; visibility: Visibility;
+  /** Labelled "Employment Category" in the UI. */
+  type: "Full-time" | "Contract" | "Fixed Term Contract";
+  closes: string; closesAt: string;
+  /** Labelled "Sourcing Type" in the UI. */
+  visibility: Visibility;
   minAge: number; requiredExperience: number; requiredQualification: QualLevel;
   description?: string; featured?: boolean;
   status?: JobStatus; departmentId?: number | null; declineReason?: string | null;
+  /** e.g. "UCAA/ADV/EXT/01/2026" */
+  jobRef?: string;
+  reportsTo?: string;
+  vacancies?: number;
+  /** "Job Purpose" — candidate-facing role summary, separate from the internal `description`. */
+  aboutRole?: string;
+  accountabilities?: { area: string; activities: string[] }[];
+  specialSkills?: string[];
 };
 
 export type Application = {
@@ -211,7 +255,7 @@ export type Application = {
 
 const NON_WITHDRAWABLE_STATUSES: ApplicationStatus[] = [
   "Shortlisted", "Interview", "Assessment Scheduled", "Assessment Complete",
-  "Shortlisted II", "Background Check", "Offered",
+  "Shortlisted II", "Offered",
 ];
 export function canWithdraw(status: ApplicationStatus): boolean {
   return !NON_WITHDRAWABLE_STATUSES.includes(status);
@@ -374,6 +418,14 @@ type Ctx = {
   saveCv: (cv: CvProfile) => void;
   hasCv: boolean;
   cvStore: Record<string, CvProfile>;
+  /** Fetches and caches any of these candidates' CVs not already in cvStore
+   *  (admin-only backend route). cvStore was previously only ever populated
+   *  from 2 hardcoded demo profiles plus whatever CV the current browser's
+   *  own session happened to save — meaning a real admin viewing a real
+   *  candidate's application almost never actually saw their CV data, and
+   *  auto-screening silently fell back to its fake demo-simulation path
+   *  instead of evaluating the real CV. */
+  loadCvsForEmails: (emails: string[]) => void;
   audit: AuditEntry[];
   settings: AdminSettings;
   updateSettings: (p: Partial<AdminSettings>) => void;
@@ -386,6 +438,10 @@ type Ctx = {
   departments: Department[];
   loadDepartments: () => void;
   addDepartment: (data: { name: string; code: string }) => Promise<void>;
+  jobTemplates: JobTemplate[];
+  loadJobTemplates: () => void;
+  saveJobTemplate: (data: { name: string; departmentId?: number | null; sourceJobId?: number | null; content: Record<string, unknown> }) => Promise<JobTemplate>;
+  deleteJobTemplate: (id: number) => Promise<void>;
   permissionOverrides: PermissionOverride[];
   savePermissionOverride: (p: PermissionOverride) => void;
   sentEmails: SentEmail[];
@@ -656,6 +712,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [signInPromptOpen, setSignInPromptOpen] = useState(false);
   const [jobs, setJobs] = useState<Job[]>(JOBS);
+  const jobsMutatedAtRef = useRef(0);
   const [applications, setApplications] = useState<Application[]>(APPLICATIONS);
   const [cv, setCv] = useState<CvProfile>(EMPTY_CV);
   const [hasCv, setHasCv] = useState(false);
@@ -665,6 +722,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [criteria, setCriteria] = useState<JobCriteria[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
+  const [jobTemplates, setJobTemplates] = useState<JobTemplate[]>([]);
   const [permissionOverrides, setPermissionOverrides] = useState<PermissionOverride[]>([]);
   const [sentEmails, setSentEmails] = useState<SentEmail[]>([]);
   const [analyticsEvents, setAnalyticsEvents] = useState<AnalyticsEvent[]>(generateAnalyticsSeed);
@@ -731,9 +789,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // same-paint fallback so the page isn't blank while this resolves. Without
     // this, anonymous visitors were stuck on the seed data's fixed closing dates,
     // which age past "today" and quietly filter themselves out of every listing.
-    jobsApi.list().then(r => { if (r.success) persistJobs(r.data as unknown as Job[]); }).catch(() => {});
+    fetchJobsList();
     settingsApi.get().then(r => { if (r.success) setSettings(prev => ({ ...prev, ...(r.data as unknown as AdminSettings) })); }).catch(() => {});
   }, []);
+
+  // Keeps localStorage in sync with `jobs` regardless of which code path
+  // changed it — addJob/updateJob/deleteJob/reconcileJob/fetchJobsList all
+  // call setJobs directly (functional form, to avoid stale-closure bugs)
+  // rather than each duplicating this write themselves.
+  useEffect(() => {
+    try { localStorage.setItem(JOBS_KEY, JSON.stringify(jobs)); } catch {}
+  }, [jobs]);
 
   // A local-only session (e.g. the demo admin shortcut, which sets isLoggedIn
   // without ever obtaining a real backend token) looks "logged in" here but
@@ -750,9 +816,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setAuth(a);
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(a)); } catch {}
   };
-  const persistJobs = (next: Job[]) => { setJobs(next); try { localStorage.setItem(JOBS_KEY, JSON.stringify(next)); } catch {} };
+  const persistJobs = (next: Job[]) => { jobsMutatedAtRef.current = Date.now(); setJobs(next); };
   const persistApps = (next: Application[]) => { setApplications(next); try { localStorage.setItem(APPS_KEY, JSON.stringify(next)); } catch {} };
   const persistNotifs = (next: Notification[]) => { setNotifications(next); try { localStorage.setItem(NOTIF_KEY, JSON.stringify(next)); } catch {} };
+
+  // Multiple call sites independently re-fetch the full jobs list in the
+  // background (mount, login, register) with no ordering guarantee. Without
+  // this guard, a slow one of these can resolve *after* a newer local
+  // mutation (e.g. a job just created and submitted for review) and silently
+  // overwrite it with a stale pre-mutation snapshot, making the job appear
+  // to vanish from the UI even though it exists in the database.
+  const fetchJobsList = () => {
+    const requestedAt = Date.now();
+    return jobsApi.list().then((r) => {
+      if (r.success && jobsMutatedAtRef.current <= requestedAt) persistJobs(r.data as unknown as Job[]);
+    }).catch(() => {});
+  };
 
   const signIn = (firstName: string, lastName = "", email = "", opts?: { accountType?: AccountType; employeeNumber?: string; adminRole?: AdminRole }) => {
     const accountType = opts?.accountType ?? "external";
@@ -778,7 +857,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       });
       // Load real data in the background
       Promise.all([
-        jobsApi.list().then(r => { if (r.success) persistJobs(r.data as unknown as Job[]); }).catch(() => {}),
+        fetchJobsList(),
         appsApi.list().then(r => { if (r.success) persistApps(r.data as unknown as Application[]); }).catch(() => {}),
         settingsApi.get().then(r => { if (r.success) setSettings(prev => ({ ...prev, ...(r.data as unknown as AdminSettings) })); }).catch(() => {}),
         notifApi.list().then(r => { if (r.success) persistNotifs(r.data as unknown as Notification[]); }).catch(() => {}),
@@ -823,7 +902,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         emailVerified: u.emailVerified,
       });
       Promise.all([
-        jobsApi.list().then(r => { if (r.success) persistJobs(r.data as unknown as Job[]); }).catch(() => {}),
+        fetchJobsList(),
         appsApi.list().then(r => { if (r.success) persistApps(r.data as unknown as Application[]); }).catch(() => {}),
         notifApi.list().then(r => { if (r.success) persistNotifs(r.data as unknown as Notification[]); }).catch(() => {}),
       ]);
@@ -950,25 +1029,37 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // called the backend — meaning no job created through the admin UI had
   // ever actually reached the `jobs` table. Fixed to call the real API and
   // reconcile local state from its response (real id, real status).
+  //
+  // Each uses the functional setJobs(prev => ...) form rather than reading
+  // `jobs` from the closure directly — a job is typically created and then
+  // immediately submitted for review (addJob then reconcileJob, seconds
+  // apart), and closure-captured `jobs` can be stale by the time the second
+  // call runs, silently discarding the first update.
   const addJob: Ctx["addJob"] = async (j) => {
     const res = await jobsApi.create(j);
     const created = res.data as unknown as Job;
-    persistJobs([created, ...jobs]);
+    jobsMutatedAtRef.current = Date.now();
+    setJobs((prev) => [created, ...prev]);
     return created;
   };
   const updateJob: Ctx["updateJob"] = async (id, patch) => {
     const res = await jobsApi.update(id, patch);
     const updated = res.data as unknown as Job;
-    persistJobs(jobs.map((j) => (j.id === id ? updated : j)));
+    jobsMutatedAtRef.current = Date.now();
+    setJobs((prev) => prev.map((j) => (j.id === id ? updated : j)));
   };
   const deleteJob: Ctx["deleteJob"] = async (id) => {
     await jobsApi.delete(id);
-    persistJobs(jobs.filter((j) => j.id !== id));
+    jobsMutatedAtRef.current = Date.now();
+    setJobs((prev) => prev.filter((j) => j.id !== id));
   };
 
   // Job-approval workflow transitions — each reconciles local state from the
   // backend's response so the status badge/action buttons update immediately.
-  const reconcileJob = (updated: Job) => persistJobs(jobs.map((j) => (j.id === updated.id ? updated : j)));
+  const reconcileJob = (updated: Job) => {
+    jobsMutatedAtRef.current = Date.now();
+    setJobs((prev) => prev.map((j) => (j.id === updated.id ? updated : j)));
+  };
   const submitJobForReview: Ctx["submitJobForReview"] = async (id) => {
     const res = await jobsApi.submitForReview(id);
     reconcileJob(res.data as unknown as Job);
@@ -1008,6 +1099,36 @@ export function AppProvider({ children }: { children: ReactNode }) {
     cvApi.save(next).catch((err) => {
       pushToast({ type: "warning", title: "CV not saved to server", message: err instanceof Error ? err.message : "Please check your connection and try again." });
     });
+  };
+
+  const cvFetchInFlightRef = useRef<Set<string>>(new Set());
+  const CV_FETCH_BATCH_SIZE = 8;
+  const CV_FETCH_MAX_PER_CALL = 100;
+  const loadCvsForEmails: Ctx["loadCvsForEmails"] = (emails) => {
+    const toFetch = Array.from(new Set(emails.map((e) => e.toLowerCase())))
+      .filter((e) => e && !(e in cvStore) && !cvFetchInFlightRef.current.has(e))
+      // Defensive cap — a caller scoped to a single job's applicant pool
+      // should never hit this, but nothing here should be able to fire an
+      // unbounded burst of simultaneous requests against the browser's
+      // connection pool.
+      .slice(0, CV_FETCH_MAX_PER_CALL);
+    if (toFetch.length === 0) return;
+    toFetch.forEach((e) => cvFetchInFlightRef.current.add(e));
+
+    (async () => {
+      for (let i = 0; i < toFetch.length; i += CV_FETCH_BATCH_SIZE) {
+        const batch = toFetch.slice(i, i + CV_FETCH_BATCH_SIZE);
+        const results = await Promise.all(batch.map((email) =>
+          cvApi.getByEmail(email).then((r) => ({ email, cv: r.success ? r.data : null })).catch(() => ({ email, cv: null }))
+        ));
+        setCvStore((prev) => {
+          const next = { ...prev };
+          for (const { email, cv } of results) { if (cv) next[email] = cv as unknown as CvProfile; }
+          return next;
+        });
+        batch.forEach((e) => cvFetchInFlightRef.current.delete(e));
+      }
+    })();
   };
 
   const pushToast = useCallback((t: Omit<Toast, "id">) => {
@@ -1081,6 +1202,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setDepartments((prev) => [...prev, res.data].sort((a, b) => a.name.localeCompare(b.name)));
   };
 
+  // Job templates — fetched on demand by the job-creation page's template
+  // picker, same pattern as loadDepartments.
+  const loadJobTemplates: Ctx["loadJobTemplates"] = () => {
+    jobTemplatesApi.list().then((r) => { if (r.success) setJobTemplates(r.data as unknown as JobTemplate[]); }).catch(() => {});
+  };
+
+  const saveJobTemplate: Ctx["saveJobTemplate"] = async (data) => {
+    const res = await jobTemplatesApi.create(data);
+    const created = res.data as unknown as JobTemplate;
+    setJobTemplates((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
+    return created;
+  };
+
+  const deleteJobTemplate: Ctx["deleteJobTemplate"] = async (id) => {
+    await jobTemplatesApi.delete(id);
+    setJobTemplates((prev) => prev.filter((t) => t.id !== id));
+  };
+
   const savePermissionOverride: Ctx["savePermissionOverride"] = (p) => {
     const next = [...permissionOverrides.filter((x) => x.email !== p.email), p];
     setPermissionOverrides(next);
@@ -1137,11 +1276,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         signInPromptOpen,
         openSignInPrompt: () => setSignInPromptOpen(true),
         closeSignInPrompt: () => setSignInPromptOpen(false),
-        cv, saveCv, hasCv, cvStore,
+        cv, saveCv, hasCv, cvStore, loadCvsForEmails,
         audit, settings, updateSettings, logAction,
         notifications, sendNotification, markNotificationRead,
         criteria, saveCriteria,
         departments, loadDepartments, addDepartment,
+        jobTemplates, loadJobTemplates, saveJobTemplate, deleteJobTemplate,
         permissionOverrides, savePermissionOverride,
         sentEmails, logEmail, bulkLogEmails, clearEmailLog,
         analyticsEvents, trackEvent,

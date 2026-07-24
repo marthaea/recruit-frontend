@@ -3,6 +3,7 @@ import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { z } from "zod";
 import { ChevronLeft, ChevronRight, Plus, Trash2, Check, AlertCircle, Pencil, Upload } from "lucide-react";
 import { useApp, EMPTY_CV, screeningAnswerPasses, type CvProfile, type CvQualification, type QualLevel, type ScreeningQuestion } from "@/context/AppContext";
+import { criteria as criteriaApi } from "@/lib/api/client";
 import { SuccessModal } from "@/components/SuccessModal";
 import { O_LEVEL_SUBJECTS, A_LEVEL_SUBJECTS, O_LEVEL_GRADES, A_LEVEL_GRADES, QUAL_LEVELS, UGANDAN_UNIVERSITIES, COMMON_COURSES } from "@/lib/uganda-curriculum";
 import { extractPdfText } from "@/lib/pdf-extract";
@@ -19,7 +20,7 @@ function input(cls = "") { return "w-full px-2.5 py-1.5 text-sm border border-ca
 const label = "block text-xs font-medium text-caa-body mb-1";
 
 function ApplyPage() {
-  const { auth, sessionRestoring, openSignInPrompt, jobs, applications, cv, hasCv, saveCv, addApplication, updateApplicationStatus, criteria, pushToast } = useApp();
+  const { auth, sessionRestoring, openSignInPrompt, jobs, applications, cv, hasCv, saveCv, addApplication, updateApplicationStatus, pushToast } = useApp();
   const hasExistingApplication = applications.some((a) => a.candidateEmail === auth.email);
   const { jobId } = Route.useSearch();
   const navigate = useNavigate();
@@ -33,10 +34,16 @@ function ApplyPage() {
     if (!auth.isLoggedIn) openSignInPrompt();
   }, [auth.isLoggedIn, sessionRestoring, openSignInPrompt]);
 
-  const screeningQs = useMemo(
-    () => criteria.find((c) => c.jobId === job.id)?.screeningQuestions ?? [],
-    [criteria, job.id]
-  );
+  // Fetched from the public criteria endpoint, not the admin-only `criteria`
+  // context array — a candidate account never has permission to load that,
+  // so screening questions (and any disqualifier logic riding on them) were
+  // previously never actually shown to or enforced against real candidates.
+  const [screeningQs, setScreeningQs] = useState<ScreeningQuestion[]>([]);
+  useEffect(() => {
+    criteriaApi.getPublic(job.id).then((r) => {
+      if (r.success) setScreeningQs((r.data.screeningQuestions as unknown as ScreeningQuestion[]) ?? []);
+    }).catch(() => {});
+  }, [job.id]);
   const hasScreening = screeningQs.length > 0;
   const [screeningAnswers, setScreeningAnswers] = useState<Record<string, string>>({});
 

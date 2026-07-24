@@ -3,14 +3,14 @@ import {
   FileDown, Zap,
 } from "lucide-react";
 import {
-  type Application,
+  type Application, type JobCriteria,
 } from "@/context/AppContext";
 import {
   downloadInternsReport,
 } from "@/lib/admin-pdf";
 import { STATUS_COLORS } from "./shared";
 
-export function InternsTab({ applications, jobs, actor, updateStatus, bulkUpdateStatus, canShortlist, logAction }: any) {
+export function InternsTab({ applications, jobs, criteria, actor, updateStatus, bulkUpdateStatus, canShortlist, logAction }: any) {
   const interns = [...applications]
     .filter((a: Application) => a.cgpa !== undefined)
     .sort((a: Application, b: Application) => (b.cgpa ?? 0) - (a.cgpa ?? 0));
@@ -22,11 +22,21 @@ export function InternsTab({ applications, jobs, actor, updateStatus, bulkUpdate
   const cgpaColor = (g: number) =>
     g >= 4.5 ? "text-caa-success" : g >= 3.5 ? "text-caa-navy" : g >= 3.0 ? "text-caa-warning" : "text-caa-danger";
 
+  // Effective threshold per candidate: the candidate's own job may have a
+  // minCgpa configured in Criteria Setup — previously this ran a single
+  // global CGPA cutoff against every job identically, ignoring any per-job
+  // criteria entirely. The manual field below still applies as the default/
+  // override for jobs that have no criteria configured.
+  const effectiveThreshold = (a: Application) => {
+    const jc = (criteria as JobCriteria[] | undefined)?.find((c) => c.jobId === a.jobId);
+    return jc?.minCgpa !== undefined ? jc.minCgpa : cgpaThreshold;
+  };
+
   const runAutoScreen = () => {
     const eligible = interns.filter((a: Application) => a.status === "Pending" || a.status === "Under Review");
     setScreeningPreview({
-      pass: eligible.filter((a: Application) => (a.cgpa ?? 0) >= cgpaThreshold),
-      fail: eligible.filter((a: Application) => (a.cgpa ?? 0) < cgpaThreshold),
+      pass: eligible.filter((a: Application) => (a.cgpa ?? 0) >= effectiveThreshold(a)),
+      fail: eligible.filter((a: Application) => (a.cgpa ?? 0) < effectiveThreshold(a)),
     });
   };
 
@@ -82,7 +92,7 @@ export function InternsTab({ applications, jobs, actor, updateStatus, bulkUpdate
         <div className="caa-card p-4 space-y-3">
           <div className="flex items-center gap-2">
             <Zap className="h-4 w-4 text-caa-navy" />
-            <p className="font-semibold text-sm text-caa-body">Auto-Screen Preview — CGPA ≥ {cgpaThreshold.toFixed(1)}</p>
+            <p className="font-semibold text-sm text-caa-body">Auto-Screen Preview — CGPA ≥ {cgpaThreshold.toFixed(1)} (default; jobs with their own minimum CGPA in Criteria Setup use that instead)</p>
           </div>
           {(screeningPreview.pass.length + screeningPreview.fail.length) === 0 ? (
             <p className="text-xs text-caa-muted">No eligible applicants (Pending or Under Review) to screen.</p>
@@ -94,7 +104,7 @@ export function InternsTab({ applications, jobs, actor, updateStatus, bulkUpdate
                   {screeningPreview.pass.length === 0
                     ? <p className="text-xs text-caa-muted italic">None meet the threshold</p>
                     : screeningPreview.pass.map((a: Application) => (
-                        <p key={a.id} className="text-xs text-caa-body">{a.candidateName} <span className="text-caa-muted">— {a.cgpa?.toFixed(1)}</span></p>
+                        <p key={a.id} className="text-xs text-caa-body">{a.candidateName} <span className="text-caa-muted">— {a.cgpa?.toFixed(1)} (min {effectiveThreshold(a).toFixed(1)})</span></p>
                       ))}
                 </div>
                 <div className="rounded-md bg-caa-danger/5 border border-caa-danger/20 p-3">
@@ -102,7 +112,7 @@ export function InternsTab({ applications, jobs, actor, updateStatus, bulkUpdate
                   {screeningPreview.fail.length === 0
                     ? <p className="text-xs text-caa-muted italic">None below the threshold</p>
                     : screeningPreview.fail.map((a: Application) => (
-                        <p key={a.id} className="text-xs text-caa-body">{a.candidateName} <span className="text-caa-muted">— {a.cgpa?.toFixed(1)}</span></p>
+                        <p key={a.id} className="text-xs text-caa-body">{a.candidateName} <span className="text-caa-muted">— {a.cgpa?.toFixed(1)} (min {effectiveThreshold(a).toFixed(1)})</span></p>
                       ))}
                 </div>
               </div>

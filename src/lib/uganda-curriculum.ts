@@ -64,7 +64,7 @@ export const O_LEVEL_GRADES = ["D1", "D2", "C3", "C4", "C5", "C6", "P7", "P8", "
 export const A_LEVEL_GRADES = ["A", "B", "C", "D", "E", "O", "F"];
 export const QUAL_LEVELS = ["O-Level", "A-Level", "Certificate", "Diploma", "Degree", "Masters", "PhD"] as const;
 export const SALARY_BANDS = ["UG1", "UG2", "UG3", "UG4", "UG5", "UG6", "UG7"];
-export const EMPLOYMENT_TYPES = ["Full-time", "Contract"] as const;
+export const EMPLOYMENT_TYPES = ["Full-time", "Contract", "Fixed Term Contract"] as const;
 export const DEPARTMENTS = [
   { key: "atm", label: "Air Traffic Mgmt" },
   { key: "safety", label: "Aviation Safety" },
@@ -74,3 +74,34 @@ export const DEPARTMENTS = [
   { key: "ops", label: "Operations" },
   { key: "hr", label: "Human Resources" },
 ];
+
+export const LOCATIONS = [
+  "Entebbe International Airport",
+  "CAA Head Office — Entebbe",
+  "Kampala HQ",
+  "Gulu Aerodrome",
+  "Jinja Aerodrome",
+  "Mbarara Aerodrome",
+  "Fort Portal (Kasese) Aerodrome",
+  "Arua Aerodrome",
+  "Soroti Aerodrome",
+  "Kidepo Aerodrome",
+];
+
+// ─── Structured requirement builder metadata ───────────────────────────────────
+// One entry per RequirementKind (see AppContext.tsx), describing how the
+// requirement-builder UI should collect its value and phrase the auto-generated
+// candidate-facing label/question.
+export type RequirementValueType = "number" | "text" | "grade" | "subjectGrade" | "none";
+export const REQUIREMENT_KIND_META: Record<string, { label: string; valueType: RequirementValueType; unit?: string }> = {
+  minAge:             { label: "Minimum age",             valueType: "number", unit: "years" },
+  maxAge:              { label: "Maximum age",             valueType: "number", unit: "years" },
+  flyingHours:         { label: "Minimum flying hours",    valueType: "number", unit: "hours" },
+  experienceYears:     { label: "Minimum years of experience", valueType: "number", unit: "years" },
+  sex:                 { label: "Sex",                     valueType: "text" },
+  qualificationLevel:  { label: "Qualification level",     valueType: "grade" },
+  specificDegree:      { label: "Specific degree (free text)", valueType: "text" },
+  oLevelSubject:       { label: "O-Level subject & grade",  valueType: "subjectGrade" },
+  aLevelSubject:       { label: "A-Level subject & grade",  valueType: "subjectGrade" },
+  custom:              { label: "Custom requirement",      valueType: "text" },
+};

@@ -19,6 +19,8 @@ const PERM_FIELDS: { key: keyof PermissionOverride; label: string }[] = [
   { key: "canReviewJob",         label: "Review Job Listings (Head of Department)" },
   { key: "canApproveJob",        label: "Approve & Publish Job Listings (DHRA)" },
   { key: "canManageCriteria",    label: "Set Screening Criteria" },
+  { key: "canScheduleAssessment", label: "Schedule Candidate Assessments" },
+  { key: "canRecordAssessment",  label: "Record Assessment Results" },
   { key: "canViewStaff",         label: "View Internal Staff" },
   { key: "canExport",            label: "Export Reports (PDF)" },
   { key: "canViewAudit",         label: "View Audit Log" },

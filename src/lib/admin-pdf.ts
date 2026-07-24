@@ -1,6 +1,6 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import type { Application, Job, AuditEntry, CvProfile } from "@/context/AppContext";
+import type { Application, Job, AuditEntry, CvProfile, JobRequirement } from "@/context/AppContext";
 import { CAA_LOGO_BASE64 } from "@/lib/caa-logo-base64";
 
 const NAVY: [number, number, number] = [13, 36, 84];
@@ -179,7 +179,7 @@ function openPdfInTab(doc: jsPDF, fallbackName: string) {
   }
 }
 
-export function downloadCandidateCv(cv: CvProfile, app: Application | undefined, actor: string, opts?: { preview?: boolean }) {
+function buildCandidateCvDoc(cv: CvProfile, app: Application | undefined, actor: string): { doc: jsPDF; name: string } {
   const doc = new jsPDF();
   const name = `${cv.personal.firstName} ${cv.personal.lastName}`.trim() || app?.candidateName || "Candidate";
   header(doc, `Candidate Dossier — ${name}`, app ? `${app.title} • Submitted ${app.date} • ${app.status}` : "CV on file");
@@ -243,8 +243,35 @@ export function downloadCandidateCv(cv: CvProfile, app: Application | undefined,
   }
 
   footer(doc, actor);
+  return { doc, name };
+}
+
+export function downloadCandidateCv(cv: CvProfile, app: Application | undefined, actor: string, opts?: { preview?: boolean }) {
+  const { doc, name } = buildCandidateCvDoc(cv, app, actor);
   const file = `caa-candidate-${name.replace(/\s+/g, "-").toLowerCase()}.pdf`;
   if (opts?.preview) openPdfInTab(doc, file); else doc.save(file);
+}
+
+/** Bundles multiple candidates' CV PDFs into a single ZIP download — for
+ *  batch-downloading shortlisted candidates without one save-dialog per CV. */
+export async function downloadCandidateCvsZip(items: { cv: CvProfile; app: Application }[], actor: string) {
+  const { default: JSZip } = await import("jszip");
+  const zip = new JSZip();
+  const usedNames = new Set<string>();
+  for (const { cv, app } of items) {
+    const { doc, name } = buildCandidateCvDoc(cv, app, actor);
+    let base = `caa-candidate-${name.replace(/\s+/g, "-").toLowerCase()}`;
+    let filename = `${base}.pdf`;
+    let n = 2;
+    while (usedNames.has(filename)) { filename = `${base}-${n++}.pdf`; }
+    usedNames.add(filename);
+    zip.file(filename, doc.output("blob"));
+  }
+  const blob = await zip.generateAsync({ type: "blob" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = `caa-candidate-cvs-${Date.now()}.zip`; a.click();
+  URL.revokeObjectURL(url);
 }
 
 export type StaffRecord = {
@@ -310,7 +337,7 @@ export function downloadApplicationSummary(
       ["Position applied",    app.title],
       ["Department",          job?.dept ?? app.dept],
       ["Location",            job?.location ?? "—"],
-      ["Salary band",         job?.salaryBand ? `${job.salaryBand} (${job.salary})` : "—"],
+      ["Salary scale",        job?.salaryBand ?? "—"],
       ["Employment type",     job?.type ?? "—"],
       ["Application status",  app.status],
       ["Profile completion",  `${app.completion}%`],
@@ -705,9 +732,13 @@ export function downloadOfferLetter(app: Application, job: Job | undefined, acto
   doc.save(`offer-letter-${(app.candidateName ?? "applicant").replace(/\s+/g, "-").toLowerCase()}-${Date.now()}.pdf`);
 }
 
-export function downloadJobAdvert(job: Job, actor: string) {
+export function downloadJobAdvert(job: Job, actor: string, requirements: JobRequirement[] = []) {
   const doc = new jsPDF();
   header(doc, "Job Advertisement", job.dept);
+
+  const ensureSpace = (needed: number) => {
+    if (y + needed > 280) { doc.addPage(); y = 20; }
+  };
 
   // Title block
   let y = 65;
@@ -732,15 +763,18 @@ export function downloadJobAdvert(job: Job, actor: string) {
   );
   y += 12;
 
-  // Key details table
+  // Key details table — salary is shown as its Scale code only, never the range
   autoTable(doc, {
     startY: y,
     head: [["Field", "Details"]],
     body: [
+      ["Job Reference",         job.jobRef || "—"],
       ["Department",            job.dept],
+      ["Reports To",            job.reportsTo || "—"],
       ["Location",              job.location],
-      ["Employment Type",       job.type],
-      ["Salary Band",           `${job.salaryBand} — ${job.salary}`],
+      ["Employment Category",   job.type],
+      ["Salary Scale",          job.salaryBand],
+      ["Vacancies",             String(job.vacancies ?? 1)],
       ["Minimum Age",           `${job.minAge} years`],
       ["Required Experience",   `${job.requiredExperience} year(s)`],
       ["Minimum Qualification", job.requiredQualification],
@@ -753,12 +787,14 @@ export function downloadJobAdvert(job: Job, actor: string) {
   });
   y = (doc as any).lastAutoTable.finalY + 10;
 
-  // Description
-  if (job.description?.trim()) {
+  // Job purpose (falls back to the internal description if not set)
+  const about = job.aboutRole?.trim() || job.description?.trim();
+  if (about) {
+    ensureSpace(20);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(11);
     doc.setTextColor(...NAVY);
-    doc.text("ABOUT THE ROLE", 10, y);
+    doc.text("JOB PURPOSE", 10, y);
     y += 1;
     doc.setDrawColor(...NAVY);
     doc.setLineWidth(0.3);
@@ -767,12 +803,80 @@ export function downloadJobAdvert(job: Job, actor: string) {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(9.5);
     doc.setTextColor(40, 40, 40);
-    const descLines = doc.splitTextToSize(job.description, 185);
+    const descLines = doc.splitTextToSize(about, 185);
     doc.text(descLines, 10, y);
     y += descLines.length * 4.8 + 10;
   }
 
+  // Principal accountabilities
+  if (job.accountabilities?.length) {
+    ensureSpace(20);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.setTextColor(...NAVY);
+    doc.text("PRINCIPAL ACCOUNTABILITIES", 10, y); y += 1;
+    doc.setDrawColor(...NAVY); doc.setLineWidth(0.3); doc.line(10, y + 2, 90, y + 2); y += 6;
+    for (const acc of job.accountabilities) {
+      ensureSpace(10);
+      doc.setFont("helvetica", "bold"); doc.setFontSize(9.5); doc.setTextColor(...NAVY);
+      const areaLines = doc.splitTextToSize(acc.area, 185);
+      doc.text(areaLines, 10, y); y += areaLines.length * 4.8 + 1;
+      doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(40, 40, 40);
+      for (const act of acc.activities) {
+        ensureSpace(8);
+        const lines = doc.splitTextToSize(`•  ${act}`, 180);
+        doc.text(lines, 14, y); y += lines.length * 4.5;
+      }
+      y += 3;
+    }
+    y += 4;
+  }
+
+  // Person specifications — essential/desirable requirements, drawn from the
+  // structured requirement builder (criteriaOnly items excluded — silent by design)
+  const visible = requirements.filter((r) => r.usage !== "criteriaOnly");
+  const essential = visible.filter((r) => r.mandatory).map((r) => r.label);
+  const desirable = visible.filter((r) => !r.mandatory).map((r) => r.label);
+  const essentialList = essential.length ? essential : [
+    `A minimum of a ${job.requiredQualification} from a recognised institution`,
+    ...(job.requiredExperience > 0 ? [`At least ${job.requiredExperience} year(s) of relevant experience`] : []),
+    `Must be at least ${job.minAge} years old`,
+  ];
+
+  ensureSpace(20);
+  doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.setTextColor(...NAVY);
+  doc.text("PERSON SPECIFICATIONS", 10, y); y += 1;
+  doc.setDrawColor(...NAVY); doc.setLineWidth(0.3); doc.line(10, y + 2, 78, y + 2); y += 6;
+  doc.setFont("helvetica", "bold"); doc.setFontSize(9.5); doc.setTextColor(40, 40, 40);
+  doc.text("Essential Requirements", 10, y); y += 5;
+  doc.setFont("helvetica", "normal"); doc.setFontSize(9);
+  essentialList.forEach((r, i) => {
+    ensureSpace(8);
+    const lines = doc.splitTextToSize(`${i + 1}. ${r}`, 180);
+    doc.text(lines, 14, y); y += lines.length * 4.5;
+  });
+  y += 3;
+  if (desirable.length) {
+    ensureSpace(12);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(9.5);
+    doc.text("Desirable", 10, y); y += 5;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9);
+    const lines = doc.splitTextToSize(desirable.join(" "), 180);
+    doc.text(lines, 14, y); y += lines.length * 4.5 + 3;
+  }
+  if (job.specialSkills?.length) {
+    ensureSpace(12);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(9.5);
+    doc.text("Special Skills and Attributes", 10, y); y += 5;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9);
+    job.specialSkills.forEach((s, i) => {
+      ensureSpace(8);
+      const lines = doc.splitTextToSize(`${i + 1}. ${s}`, 180);
+      doc.text(lines, 14, y); y += lines.length * 4.5;
+    });
+  }
+  y += 8;
+
   // How to apply box
+  ensureSpace(36);
   doc.setFillColor(245, 247, 250);
   doc.roundedRect(10, y, 190, 32, 2, 2, "F");
   doc.setDrawColor(...NAVY);
@@ -986,7 +1090,7 @@ export function downloadApplicantsPerClosingDateReport(
   doc.save(`caa-applicants-per-closing-date-${Date.now()}.pdf`);
 }
 
-// ─── Phase 2b — Assessment, background check & deployment reports ────────────
+// ─── Phase 2b — Assessment & deployment reports ───────────────────────────────
 
 type AssessmentRow = {
   candidateName: string; jobTitle: string; type: string;
@@ -1030,33 +1134,6 @@ export function downloadCandidateAssessmentReport(rows: AssessmentRow[], actor: 
   });
   footer(doc, actor);
   doc.save(`caa-candidate-assessment-${Date.now()}.pdf`);
-}
-
-type BackgroundCheckRow = {
-  candidateName: string; jobTitle: string; refereeName: string | null;
-  refereeEmail: string | null; status: string; contactedAt: string | null;
-};
-
-export function downloadBackgroundCheckReport(rows: BackgroundCheckRow[], actor: string) {
-  const doc = new jsPDF();
-  header(doc, "Candidate Background Check Report", `${rows.length} referee checks as at ${new Date().toLocaleDateString()}`);
-  const statusLabel: Record<string, string> = {
-    pending: "Pending", contacted: "Contacted", verified: "Verified",
-    could_not_reach: "Could Not Reach", declined_to_confirm: "Declined to Confirm",
-  };
-  autoTable(doc, {
-    startY: 65,
-    head: [["Candidate", "Position", "Referee", "Email", "Status", "Contacted"]],
-    body: rows.map((r) => [
-      r.candidateName, r.jobTitle, r.refereeName ?? "—", r.refereeEmail ?? "—",
-      statusLabel[r.status] ?? r.status, r.contactedAt ? new Date(r.contactedAt).toLocaleDateString() : "—",
-    ]),
-    headStyles: { fillColor: NAVY, textColor: 255, fontStyle: "bold" },
-    styles: { fontSize: 8, cellPadding: 2.5 },
-    alternateRowStyles: { fillColor: [245, 247, 250] },
-  });
-  footer(doc, actor);
-  doc.save(`caa-background-check-${Date.now()}.pdf`);
 }
 
 export function downloadDeploymentReport(apps: Application[], actor: string) {

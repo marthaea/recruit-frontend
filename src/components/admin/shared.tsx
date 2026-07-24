@@ -26,7 +26,7 @@ export const STATUS_COLORS: Record<string, string> = {
   Pending: "#f59e0b", "Under Review": "#3b82f6", Shortlisted: "#10b981",
   Interview: "#8b5cf6",
   "Assessment Scheduled": "#0ea5e9", "Assessment Complete": "#6366f1",
-  "Shortlisted II": "#14b8a6", "Background Check": "#a855f7",
+  "Shortlisted II": "#14b8a6",
   Offered: "#0d9488", Declined: "#ef4444",
 };
 
@@ -90,12 +90,7 @@ export function buildEmail(status: string, candidateName: string, jobTitle: stri
     case "Shortlisted II":
       return {
         subject: `Further Shortlisting Notification — ${jobTitle} | ${ref}`,
-        body: `Dear ${candidateName},\n\nFollowing a review of your assessment results for the position of ${jobTitle}, we are pleased to inform you that you have been shortlisted to proceed to the next stage of our selection process.\n\nYou will be contacted shortly with further details.${sign}`,
-      };
-    case "Background Check":
-      return {
-        subject: `Background Verification in Progress — ${jobTitle} | ${ref}`,
-        body: `Dear ${candidateName},\n\nAs part of the final stage of our selection process for the position of ${jobTitle}, the Uganda Civil Aviation Authority is now conducting background and reference verification.\n\nWe may contact the referees provided in your application. No action is required from you at this time.${sign}`,
+        body: `Dear ${candidateName},\n\nFollowing a further review of applications for the position of ${jobTitle}, we are pleased to inform you that you remain under consideration and are progressing to the next stage of our selection process.\n\nYou will be contacted shortly with further details, including interview arrangements where applicable.${sign}`,
       };
     case "Offered":
       return {
@@ -125,6 +120,13 @@ export function autoQualify(app: Application, job: Job | undefined, cv: any, job
   if (!job) return { ok: false, checks: [] };
   const checks = [];
 
+  // Effective qualification/experience requirement — a criteria override
+  // takes precedence over the job's own default when set. Previously these
+  // overrides (requiredQualLevel/minExperienceYears) were collected in
+  // Criteria Setup but silently ignored by every screening path.
+  const effectiveQual = jobCriteria?.requiredQualLevel ?? job.requiredQualification;
+  const effectiveExp = jobCriteria?.minExperienceYears ?? job.requiredExperience;
+
   if (cv) {
     // ── Full CV-based evaluation (portal CV on file) ────────────────────
 
@@ -134,8 +136,8 @@ export function autoQualify(app: Application, job: Job | undefined, cv: any, job
 
     // Qualification
     const highestQual = cv.highestLevel || cv.qualifications?.[0]?.level || "";
-    const qualOk = (QUAL_ORDER[highestQual] ?? -1) >= (QUAL_ORDER[job.requiredQualification] ?? 0);
-    checks.push({ label: "Qualification", pass: qualOk, detail: `${highestQual || "Unknown"} vs required ${job.requiredQualification}` });
+    const qualOk = (QUAL_ORDER[highestQual] ?? -1) >= (QUAL_ORDER[effectiveQual] ?? 0);
+    checks.push({ label: "Qualification", pass: qualOk, detail: `${highestQual || "Unknown"} vs required ${effectiveQual}` });
 
     // Experience
     const expYears = cv.experience?.length
@@ -144,11 +146,20 @@ export function autoQualify(app: Application, job: Job | undefined, cv: any, job
           return sum + Math.max(0, new Date(e.end).getFullYear() - new Date(e.start).getFullYear());
         }, 0)
       : 0;
-    checks.push({ label: "Experience", pass: expYears >= job.requiredExperience, detail: `~${expYears} yr(s) vs required ${job.requiredExperience}` });
+    checks.push({ label: "Experience", pass: expYears >= effectiveExp, detail: `~${expYears} yr(s) vs required ${effectiveExp}` });
 
     // CGPA
     if (jobCriteria?.minCgpa !== undefined && app.cgpa !== undefined) {
       checks.push({ label: "CGPA", pass: app.cgpa >= jobCriteria.minCgpa, detail: `${app.cgpa.toFixed(1)} vs min ${jobCriteria.minCgpa.toFixed(1)}` });
+    }
+
+    // Disqualifying universities — previously only enforced once, server-side,
+    // at initial submission; now also checked here so re-screening and the
+    // per-candidate detail view reflect it too.
+    if (jobCriteria?.disqualifyingUniversities?.length) {
+      const candidateUni = app.university || cv.qualifications?.[0]?.institution || "";
+      const flagged = candidateUni && jobCriteria.disqualifyingUniversities.some((u) => candidateUni.toLowerCase().includes(u.toLowerCase()));
+      checks.push({ label: "Institution", pass: !flagged, detail: flagged ? `${candidateUni} is on the disqualifying list` : "Not on the disqualifying list" });
     }
 
     // Keywords
@@ -195,21 +206,27 @@ export function autoQualify(app: Application, job: Job | undefined, cv: any, job
       detail: demoOk ? "Meets minimum age for this role" : "Below minimum age threshold",
     });
     checks.push({
-      label: `Qualifications (min. ${job.requiredQualification})`,
+      label: `Qualifications (min. ${effectiveQual})`,
       pass: demoOk,
-      detail: demoOk ? `${job.requiredQualification} or equivalent confirmed` : `Does not meet ${job.requiredQualification} requirement`,
+      detail: demoOk ? `${effectiveQual} or equivalent confirmed` : `Does not meet ${effectiveQual} requirement`,
     });
-    if (job.requiredExperience > 0) {
+    if (effectiveExp > 0) {
       checks.push({
-        label: `Experience (${job.requiredExperience} yr min)`,
+        label: `Experience (${effectiveExp} yr min)`,
         pass: demoOk,
-        detail: demoOk ? `${job.requiredExperience}+ year(s) of relevant experience` : "Insufficient relevant experience on record",
+        detail: demoOk ? `${effectiveExp}+ year(s) of relevant experience` : "Insufficient relevant experience on record",
       });
     }
 
     // CGPA still uses real data if present
     if (jobCriteria?.minCgpa !== undefined && app.cgpa !== undefined) {
       checks.push({ label: "CGPA", pass: app.cgpa >= jobCriteria.minCgpa, detail: `${app.cgpa.toFixed(1)} vs min ${jobCriteria.minCgpa.toFixed(1)}` });
+    }
+
+    // Disqualifying universities
+    if (jobCriteria?.disqualifyingUniversities?.length && app.university) {
+      const flagged = jobCriteria.disqualifyingUniversities.some((u) => app.university!.toLowerCase().includes(u.toLowerCase()));
+      checks.push({ label: "Institution", pass: !flagged, detail: flagged ? `${app.university} is on the disqualifying list` : "Not on the disqualifying list" });
     }
 
     // Screening questions: precise answer check if the candidate answered on the application
