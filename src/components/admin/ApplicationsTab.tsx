@@ -224,6 +224,17 @@ export function AppsTab({ jobs, applications, jobId, cvStore, updateStatus, bulk
       pushToast({ type: "warning", title: "No CVs to download", message: "None of the selected candidates have a CV on file." });
       return;
     }
+    // Previously silent: candidates without a CV on file were dropped from
+    // the zip with no indication, so a batch of e.g. 12 could quietly
+    // produce a zip with just 1 file and no clue why the rest were missing.
+    if (withCv.length < selectedApps.length) {
+      const skipped = selectedApps.length - withCv.length;
+      pushToast({
+        type: "warning",
+        title: `${skipped} of ${selectedApps.length} skipped — no CV on file`,
+        message: "Only candidates who submitted a CV through the portal are included in the zip.",
+      });
+    }
     setDownloadingCvs(true);
     try {
       await downloadCandidateCvsZip(
