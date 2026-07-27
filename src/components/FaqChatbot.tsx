@@ -236,9 +236,17 @@ const FAQS: FaqEntry[] = [
     question: "How do I shortlist a candidate?",
     audience: ADMIN_PERSONAS,
     answer:
-      "Open the application detail view and update the status to 'Shortlisted'. Add any relevant notes. The candidate will automatically receive a notification.",
+      "Open the application detail view and update the status to 'Shortlisted'. Add any relevant notes. The candidate will automatically receive a notification. From there, candidates move to 'Shortlisted II' for CV panel scoring before advancing to Interview — see 'How does CV panel scoring (Shortlisted II) work?' for that step.",
     keywords: ["shortlist candidate", "shortlisting", "how to shortlist"],
-    followUps: ["How do I schedule an interview?", "How do I extend a job offer to a candidate?"],
+    followUps: ["How does CV panel scoring (Shortlisted II) work?", "How do I schedule an interview?"],
+  },
+  {
+    question: "How does CV panel scoring (Shortlisted II) work?",
+    audience: ADMIN_PERSONAS,
+    answer:
+      "The 'Shortlisting II' tab lets every admin on the panel score a candidate's CV independently, out of 100, with an optional comment — each panelist's own score and comment are visible to the rest of the panel (never to the candidate), and the system shows a running average per candidate. You can download a candidate's CV individually, or select several applicants in the Applications tab to download their CVs together as one zip file (only candidates who actually submitted a CV are included). 'Auto-shortlist by score' advances everyone averaging at or above a threshold you set to Interview, and declines the rest. You can also export the list to CSV for offline scoring and re-import the completed scores in bulk.",
+    keywords: ["shortlisted ii", "shortlisting ii", "panel scoring", "score candidate", "cv scoring", "candidate score", "marks out of 100", "download cv", "batch cv", "zip cv"],
+    followUps: ["How do I schedule an interview?", "How do I review applications in the HR Console?"],
   },
   {
     question: "How do I schedule an interview?",
@@ -261,15 +269,23 @@ const FAQS: FaqEntry[] = [
     question: "How do I create a new job vacancy?",
     audience: ADMIN_PERSONAS,
     answer:
-      "In the HR Console, go to the 'Job Listings' tab and click 'Create New Vacancy'. Fill in all job details, requirements, and the application deadline, then save.",
-    keywords: ["create vacancy", "new job", "post job", "create job", "add vacancy"],
-    followUps: ["How do I publish or close a job vacancy?", "How do I review applications in the HR Console?"],
+      "In the HR Console, go to 'Create Job' and click 'New listing'. It's a single page: optionally start from a saved template or upload a PDF advert to pre-fill fields, then fill in the basic details, key accountabilities, special skills, and essential/desirable requirements using the requirement builder — each essential requirement can become a candidate-facing qualifier or disqualifier question, or stay internal-only. You can save your own draft as a new template for next time.",
+    keywords: ["create vacancy", "new job", "post job", "create job", "add vacancy", "job template", "new listing", "requirement builder"],
+    followUps: ["How do I publish or close a job vacancy?", "How does a job get approved before it's published?"],
+  },
+  {
+    question: "How does a job get approved before it's published?",
+    audience: ADMIN_PERSONAS,
+    answer:
+      "A job you submit for review goes to your department's Head of Department (HOD) first, then to the Director HR & Administration (DHRA) for final approval — each step sends an email notification. If either reviewer declines it, you (the creator) get an email with their reason so you can revise and resubmit. A Super Admin can also force-publish a job directly, bypassing this chain.",
+    keywords: ["job approval", "review job", "hod", "dhra", "approve job", "decline job", "job workflow", "pending review", "pending approval"],
+    followUps: ["How do I create a new job vacancy?", "How do I publish or close a job vacancy?"],
   },
   {
     question: "How do I publish or close a job vacancy?",
     audience: ADMIN_PERSONAS,
     answer:
-      "From the 'Job Listings' tab, select the vacancy and change its status to 'Published' to make it visible to candidates, or 'Closed' to stop accepting applications.",
+      "From the 'Create Job' tab's job listing table, use the Edit action to change a vacancy's status, or Del to remove it entirely. A vacancy stops accepting applications once its closing date passes.",
     keywords: ["publish", "close vacancy", "close job", "job status", "activate job"],
     followUps: ["How do I create a new job vacancy?", "Where can I find recruitment reports and analytics?"],
   },
@@ -278,9 +294,9 @@ const FAQS: FaqEntry[] = [
     question: "Where can I find recruitment reports and analytics?",
     audience: ADMIN_PERSONAS,
     answer:
-      "HR Directors and Super Admins can access the 'Reports & Exports' tab for application statistics, time-to-hire metrics, diversity reports, and CSV/Excel exports. Recruiters can view high-level metrics on their dashboard only.",
-    keywords: ["reports", "analytics", "export", "statistics", "csv", "excel", "time to hire"],
-    followUps: ["How do I view the audit log?", "How do I manage system settings?"],
+      "HR Directors and Super Admins can access the 'Reports & Exports' tab for application statistics, time-to-hire metrics, diversity reports, and every report card has both a PDF and a CSV download. In the Applications tab itself, you can also export the current filtered list to CSV, or select candidates and download their CVs together as one zip file. Recruiters can view high-level metrics on their dashboard only.",
+    keywords: ["reports", "analytics", "export", "statistics", "csv", "excel", "time to hire", "export csv", "download csv"],
+    followUps: ["How do I view the audit log?", "How does CV panel scoring (Shortlisted II) work?"],
   },
   // ── System & Settings ─────────────────────────────────────────────────────────
   {
@@ -303,8 +319,8 @@ const FAQS: FaqEntry[] = [
     question: "How do I manage user permissions and roles?",
     audience: ADMIN_PERSONAS,
     answer:
-      "The 'Permissions' tab in the HR Console (Super Admin access) allows you to view and update role-based permissions to control what each user type can access across the portal.",
-    keywords: ["permissions", "roles", "access control", "user roles", "manage users"],
+      "The 'Assign Rights' tab in the HR Console lets IT Admins and Super Admins override any individual admin's permissions beyond their role's defaults — including job review/approval rights, assessment scheduling/recording, and department management — on a per-person basis.",
+    keywords: ["permissions", "roles", "access control", "user roles", "manage users", "assign rights"],
     followUps: ["How do I manage system settings?", "How do I access the HR Console?"],
   },
   // ── About CAA ─────────────────────────────────────────────────────────────────
@@ -741,9 +757,26 @@ function resolve(query: string, starterTopics: string[], lastEntry: FaqEntry | n
 
 type Message = { from: "bot" | "user"; text: string; followUps?: string[] };
 
+// CAA's hierarchical roles (auditor, hr_officer, it_admin, dhra, hod) aren't
+// their own Persona/ROLE_TOPICS bucket — there are only 3 admin content
+// buckets (recruiter/hr/super) and adding 5 more would just fork the same
+// FAQ answers. Each maps onto whichever bucket its day-to-day work and
+// permissions most resemble, rather than being cast through unchanged: an
+// unmapped role fell through as a literal string ROLE_TOPICS has no entry
+// for, silently losing its starter topics and getting scored down on every
+// admin-relevant FAQ (audience checks never matched).
+const ADMIN_ROLE_PERSONA: Record<string, Persona> = {
+  super: "super", hr: "hr", recruiter: "recruiter",
+  hod: "recruiter",       // reviews jobs + shortlists — day-to-day pipeline work
+  hr_officer: "hr",       // creates/manages jobs, same ground as `hr`
+  dhra: "hr",             // approves jobs, exports, reports — HR-director-level oversight
+  auditor: "super",       // audit log + exports — closest to super's topic set
+  it_admin: "super",      // assigns rights — closest to super's topic set
+};
+
 function personaOf(auth: ReturnType<typeof useApp>["auth"]): Persona {
   if (!auth.isLoggedIn) return "guest";
-  if (auth.accountType === "admin") return (auth.adminRole ?? "hr") as Persona;
+  if (auth.accountType === "admin") return ADMIN_ROLE_PERSONA[auth.adminRole ?? "hr"] ?? "hr";
   if ((auth.effectiveType ?? auth.accountType) === "internal") return "internal";
   return "external";
 }
