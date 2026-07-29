@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { X, Send, ChevronDown } from "lucide-react";
 import { MarthaAvatar } from "./MarthaAvatar";
-import { useApp } from "@/context/AppContext";
+import { useApp, type Job, type Application } from "@/context/AppContext";
 import { chatbot as chatbotApi } from "@/lib/api/client";
 
 // ── FAQ data — keyword arrays must be lowercase ───────────────────────────────
@@ -601,7 +601,7 @@ const SMALL_TALK: SmallTalkRule[] = [
   {
     test: /\b(help|what can you do|options|menu)\b/,
     replies: [
-      "Of course! I can help you with: applying for jobs and tracking applications, your candidate profile and documents, aviation careers (pilots, air traffic controllers), drone permits and licensing, CAA's airports and services, and how to contact the right team. What interests you?",
+      "Of course! I can help you with: applying for jobs and tracking applications, your candidate profile and documents, aviation careers (pilots, air traffic controllers), drone permits and licensing, CAA's airports and services, and how to contact the right team. I can also check live information for you — try asking \"What jobs are open right now?\", \"What's closing soon?\", or \"What's the status of my application?\". What interests you?",
     ],
     starters: true,
   },
@@ -700,7 +700,166 @@ type BotReply = {
   entry?: FaqEntry;
 };
 
-function resolve(query: string, starterTopics: string[], lastEntry: FaqEntry | null, persona: Persona): BotReply {
+// ── Live-data intelligence ────────────────────────────────────────────────────
+// Martha answers these from the app's real data — the actual vacancy list, the
+// signed-in user's own applications, and (for admins) the approval pipeline —
+// instead of canned FAQ text. Checked before FAQ matching so a live, personal
+// answer always beats a generic one; every branch returns null when it has
+// nothing confident to say, falling through to the normal FAQ engine.
+
+type LiveCtx = {
+  jobs: Job[];
+  applications: Application[];
+  auth: ReturnType<typeof useApp>["auth"];
+  persona: Persona;
+};
+
+const dayStart = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; };
+const daysUntil = (iso: string) => Math.ceil((new Date(iso).getTime() - dayStart().getTime()) / 86400000);
+
+function openJobsFor(ctx: LiveCtx): Job[] {
+  const seesInternal = ctx.persona !== "guest" && ctx.persona !== "external";
+  return ctx.jobs.filter((j) =>
+    (j.status ?? "published") === "published" &&
+    daysUntil(j.closesAt) >= 0 &&
+    (seesInternal || j.visibility === "external"),
+  );
+}
+
+function describeJobLine(j: Job): string {
+  const d = daysUntil(j.closesAt);
+  const when = d === 0 ? "closes today!" : d === 1 ? "closes tomorrow" : `closes ${j.closes} — ${d} days left`;
+  return `• ${j.title} (${j.dept}) ${when}`;
+}
+
+/** Best open job whose title words substantially overlap the query, if any. */
+function findJobByTitle(qWords: string[], jobs: Job[]): Job | null {
+  let best: Job | null = null;
+  let bestHits = 0;
+  for (const j of jobs) {
+    const tWords = normalize(j.title).split(" ").filter((w) => w.length > 3 && !STOP_WORDS.has(w));
+    if (tWords.length === 0) continue;
+    const hits = tWords.filter((tw) => qWords.some((qw) => wordsMatch(qw, tw))).length;
+    if (hits > bestHits && hits * 2 >= tWords.length) { best = j; bestHits = hits; }
+  }
+  return best;
+}
+
+function resolveLive(query: string, ctx: LiveCtx): BotReply | null {
+  const qn = normalize(query);
+  const qWords = qn.split(" ").filter((w) => !STOP_WORDS.has(w));
+  const isAdmin = ADMIN_PERSONAS.includes(ctx.persona);
+  const mentionsJobs = /\b(job|jobs|listing|listings|vacanc\w*|position|positions|opening|openings|role|roles|opportunit\w*)\b/.test(qn);
+
+  // Admin: what's sitting in the approval pipeline right now?
+  if (isAdmin && mentionsJobs && /\b(pending|awaiting|review\w*|approv\w*|pipeline)\b/.test(qn)) {
+    const forReview = ctx.jobs.filter((j) => j.status === "pending_review");
+    const forApproval = ctx.jobs.filter((j) => j.status === "pending_approval");
+    if (forReview.length === 0 && forApproval.length === 0) {
+      return {
+        text: "Good news — the approval pipeline is clear. No jobs are awaiting department review or final approval right now.",
+        followUps: ["How does a job get approved before it's published?", "How do I create a new job vacancy?"],
+        outcome: "answered", matched: "[live] approval pipeline",
+      };
+    }
+    const parts: string[] = [];
+    if (forReview.length > 0) parts.push(`Awaiting department review (${forReview.length}):\n${forReview.map((j) => `• ${j.title} — ${j.dept}`).join("\n")}`);
+    if (forApproval.length > 0) parts.push(`Awaiting final approval (${forApproval.length}):\n${forApproval.map((j) => `• ${j.title} — ${j.dept}`).join("\n")}`);
+    return {
+      text: `I checked the live pipeline for you:\n\n${parts.join("\n\n")}\n\nYou'll find them in the "Review Job" and "Approve & Publish" tabs of the HR Console.`,
+      followUps: ["How does a job get approved before it's published?"],
+      outcome: "answered", matched: "[live] approval pipeline",
+    };
+  }
+
+  // Admin: application volume and status breakdown
+  if (isAdmin && /\bapplicat\w*\b/.test(qn) && /\b(how many|number|count|total|stats?|statistics|breakdown|received)\b/.test(qn)) {
+    const total = ctx.applications.length;
+    if (total === 0) {
+      return { text: "There are no applications in the system yet.", followUps: ["How do I create a new job vacancy?"], outcome: "answered", matched: "[live] application stats" };
+    }
+    const byStatus = new Map<string, number>();
+    for (const a of ctx.applications) byStatus.set(a.status, (byStatus.get(a.status) ?? 0) + 1);
+    const lines = [...byStatus.entries()].sort((a, b) => b[1] - a[1]).map(([s, n]) => `• ${s}: ${n}`);
+    return {
+      text: `There are ${total} application${total === 1 ? "" : "s"} in the system right now:\n${lines.join("\n")}`,
+      followUps: ["How do I review applications in the HR Console?", "Where can I find recruitment reports and analytics?"],
+      outcome: "answered", matched: "[live] application stats",
+    };
+  }
+
+  // Signed-in candidate: their real application statuses, by name
+  if (ctx.auth.isLoggedIn && !isAdmin && /\bapplicat\w*\b/.test(qn) && /\b(my|status|track|progress|far|update|stand)\b/.test(qn)) {
+    const mine = ctx.applications.filter((a) => a.candidateEmail && a.candidateEmail.toLowerCase() === ctx.auth.email.toLowerCase());
+    if (mine.length === 0) {
+      return {
+        text: `I checked${ctx.auth.firstName ? `, ${ctx.auth.firstName}` : ""} — you haven't submitted any applications yet. Browse the Vacancies page and I'll be right here if you need help applying.`,
+        followUps: ["How can I find available jobs?", "How do I apply for a job?"],
+        outcome: "answered", matched: "[live] my applications",
+      };
+    }
+    const lines = mine.map((a) => `• ${a.title} — ${a.status}`);
+    return {
+      text: `Here's where your application${mine.length === 1 ? " stands" : "s stand"} right now:\n${lines.join("\n")}\n\nYou'll get an email whenever a status changes, and your dashboard always has the full detail.`,
+      followUps: ["What happens after I am shortlisted?", "Can I withdraw my application?"],
+      outcome: "answered", matched: "[live] my applications",
+    };
+  }
+
+  // Deadline for one specific job ("when does the ATC officer job close?")
+  if (/\b(deadline|clos\w*|due|last day|when)\b/.test(qn)) {
+    const open = openJobsFor(ctx);
+    const match = findJobByTitle(qWords, open);
+    if (match) {
+      const d = daysUntil(match.closesAt);
+      const when = d === 0 ? "closes TODAY — don't wait!" : d === 1 ? "closes tomorrow." : `closes on ${match.closes} — that's ${d} days from now.`;
+      return {
+        text: `"${match.title}" (${match.dept}) ${when}`,
+        followUps: ["How do I apply for a job?", "What documents do I need to submit?"],
+        outcome: "answered", matched: `[live] deadline: ${match.title}`,
+      };
+    }
+    // Generic "what's closing soon?"
+    if (mentionsJobs && /\b(soon|clos\w*|deadline)\b/.test(qn) && open.length > 0) {
+      const soonest = [...open].sort((a, b) => a.closesAt.localeCompare(b.closesAt)).slice(0, 3);
+      return {
+        text: `These vacancies close soonest:\n${soonest.map(describeJobLine).join("\n")}`,
+        followUps: ["How do I apply for a job?", "How can I find available jobs?"],
+        outcome: "answered", matched: "[live] closing soon",
+      };
+    }
+  }
+
+  // Live vacancy list / count, optionally narrowed by department or location
+  if (mentionsJobs && /\b(open|available|current\w*|latest|new|list|show|what|which|any|many|hiring|advertised|there)\b/.test(qn)) {
+    const open = openJobsFor(ctx);
+    if (open.length === 0) {
+      return {
+        text: "There are no open vacancies at the moment — but new roles are published regularly, so please check back soon. I can also tell you about internships and training opportunities.",
+        followUps: ["Does CAA offer internships or industrial training?", "Why work at CAA? What are the benefits?"],
+        outcome: "answered", matched: "[live] open vacancies",
+      };
+    }
+    // Narrow by department/location words the user mentioned, if that leaves anything
+    const narrowed = open.filter((j) => {
+      const words = normalize(`${j.dept} ${j.location}`).split(" ").filter((w) => w.length > 3 && !STOP_WORDS.has(w));
+      return words.some((w) => qn.includes(w));
+    });
+    const list = narrowed.length > 0 ? narrowed : open;
+    const scope = narrowed.length > 0 ? " matching that department or location" : "";
+    const shown = list.slice(0, 6);
+    const more = list.length > shown.length ? `\n…plus ${list.length - shown.length} more on the Vacancies page.` : "";
+    return {
+      text: `There ${list.length === 1 ? "is 1 open vacancy" : `are ${list.length} open vacancies`}${scope} right now:\n${shown.map(describeJobLine).join("\n")}${more}`,
+      followUps: ["How do I apply for a job?", "What information is on a job details page?"],
+      outcome: "answered", matched: "[live] open vacancies",
+    };
+  }
+
+  return null;
+}
+
+function resolve(query: string, starterTopics: string[], lastEntry: FaqEntry | null, persona: Persona, live?: LiveCtx): BotReply {
   const q = query.toLowerCase().trim();
 
   // Small talk first — keeps Martha feeling human
@@ -708,6 +867,12 @@ function resolve(query: string, starterTopics: string[], lastEntry: FaqEntry | n
     if (rule.test.test(q)) {
       return { text: pick(rule.replies), followUps: rule.starters ? starterTopics : rule.followUps, outcome: "smalltalk" };
     }
+  }
+
+  // Live-data answers beat canned FAQ text whenever Martha can give one
+  if (live) {
+    const dyn = resolveLive(query, live);
+    if (dyn) return dyn;
   }
 
   // Exact question match (from follow-up chips)
@@ -782,7 +947,7 @@ function personaOf(auth: ReturnType<typeof useApp>["auth"]): Persona {
 }
 
 export function FaqChatbot() {
-  const { auth } = useApp();
+  const { auth, jobs, applications } = useApp();
   const persona = personaOf(auth);
   const topics = ROLE_TOPICS[persona];
   const firstName = auth.isLoggedIn ? auth.firstName : "";
@@ -830,7 +995,7 @@ export function FaqChatbot() {
     // Slightly randomised delay so Martha feels less mechanical
     const delay = 500 + Math.random() * 600;
     setTimeout(() => {
-      const reply = resolve(trimmed, topics, lastEntryRef.current, persona);
+      const reply = resolve(trimmed, topics, lastEntryRef.current, persona, { jobs, applications, auth, persona });
       if (reply.entry) lastEntryRef.current = reply.entry;
       setTyping(false);
       setMessages((prev) => [...prev, { from: "bot", text: reply.text, followUps: reply.followUps }]);
@@ -891,7 +1056,7 @@ export function FaqChatbot() {
                       <MarthaAvatar size={25} />
                     </div>
                   )}
-                  <div className={`max-w-[82%] px-3 py-2 rounded-2xl text-[13px] leading-relaxed ${
+                  <div className={`max-w-[82%] px-3 py-2 rounded-2xl text-[13px] leading-relaxed whitespace-pre-line ${
                     m.from === "user"
                       ? "bg-caa-navy text-white rounded-br-sm"
                       : "bg-white text-caa-body border border-caa-border rounded-bl-sm shadow-sm"

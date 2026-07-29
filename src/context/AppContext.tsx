@@ -814,6 +814,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // against stale/demo rows, not the ones the backend actually has.
   useEffect(() => {
     if (sessionRestoring || !auth.isLoggedIn || auth.accountType !== "admin") return;
+    // Re-fetch jobs WITH the admin token. The mount-time fetchJobsList() above
+    // runs before restoreSession() resolves, so it's anonymous and only gets
+    // published jobs — leaving the Review/Approve pipeline tabs empty after
+    // any page reload until this authenticated re-fetch replaces the list.
+    fetchJobsList();
     appsApi.list().then(r => { if (r.success) persistApps(r.data as unknown as Application[]); }).catch(() => {});
     notifApi.list().then(r => { if (r.success) persistNotifs(r.data as unknown as Notification[]); }).catch(() => {});
     permissionsApi.roleDefaults().then(r => { if (r.success) setRoleDefaults(r.data.defaults as Record<AdminRole, Partial<PermissionOverride>>); }).catch(() => {});
@@ -847,15 +852,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const persistNotifs = (next: Notification[]) => { setNotifications(next); try { localStorage.setItem(NOTIF_KEY, JSON.stringify(next)); } catch {} };
 
   // Multiple call sites independently re-fetch the full jobs list in the
-  // background (mount, login, register) with no ordering guarantee. Without
-  // this guard, a slow one of these can resolve *after* a newer local
-  // mutation (e.g. a job just created and submitted for review) and silently
-  // overwrite it with a stale pre-mutation snapshot, making the job appear
-  // to vanish from the UI even though it exists in the database.
+  // background (mount, login, register, session restore) with no ordering
+  // guarantee. Two stale-response guards:
+  //  - jobsMutatedAtRef: a fetch never overwrites a *local mutation* (e.g. a
+  //    job just created/submitted) made after the fetch was requested.
+  //  - jobsFetchAppliedAtRef: an older fetch never overwrites a newer one.
+  //    This matters on admin page reloads: the anonymous mount-time fetch
+  //    (published jobs only) can resolve AFTER the authenticated post-restore
+  //    fetch and would otherwise wipe the pipeline jobs right back out of the
+  //    Review/Approve tabs. A fetch result deliberately does NOT bump
+  //    jobsMutatedAtRef — refreshing from the server is not a mutation.
+  const jobsFetchAppliedAtRef = useRef(0);
   const fetchJobsList = () => {
     const requestedAt = Date.now();
     return jobsApi.list().then((r) => {
-      if (r.success && jobsMutatedAtRef.current <= requestedAt) persistJobs(r.data as unknown as Job[]);
+      if (r.success && jobsMutatedAtRef.current <= requestedAt && jobsFetchAppliedAtRef.current <= requestedAt) {
+        jobsFetchAppliedAtRef.current = requestedAt;
+        setJobs(r.data as unknown as Job[]);
+      }
     }).catch(() => {});
   };
 
@@ -1105,6 +1119,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const isExpired: Ctx["isExpired"] = (j) => new Date(j.closesAt).getTime() < Date.now();
   const canSeeJob: Ctx["canSeeJob"] = (j) => {
+    // Candidate-facing surfaces only ever show published jobs. Signed-in
+    // admins receive the whole approval pipeline from GET /jobs (for the
+    // Review/Approve tabs), and without this check those draft/pending jobs
+    // leaked onto the public Vacancies page while an admin was logged in.
+    if ((j.status ?? "published") !== "published") return false;
     if (isExpired(j)) return false;
     if (j.visibility === "external") return true;
     return auth.isLoggedIn && auth.effectiveType === "internal";
