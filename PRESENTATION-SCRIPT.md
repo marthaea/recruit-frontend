@@ -1,7 +1,7 @@
 # CAA e-Recruitment Portal — Stakeholder Presentation Script
 
-*Prepared for the July 21, 2026 presentation. Written to be read/spoken from, with a
-reference comparison table at the end for hand-outs or a slide.*
+*Updated for the July 30, 2026 final presentation. Written to be read/spoken from,
+with a reference comparison table at the end for hand-outs or a slide.*
 
 ---
 
@@ -66,19 +66,60 @@ Drive this live in the browser. Talking points per screen:
 > changes, and they can download a PDF summary of any application for their own
 > records."
 
-### Martha — the FAQ assistant
-> "We also built an assistant, Martha, that answers common questions — how to
-> register, how to reset a password, what documents are needed — instantly, in
-> plain language, without a candidate needing to email HR and wait. Every question
-> she's asked is logged, which means we can see exactly what's confusing candidates
-> and fix it — that data feeds directly into the analytics dashboard on the admin
-> side."
+### Martha — the intelligent assistant
+> "We also built an assistant, Martha — and she's not a canned FAQ bot. She's
+> connected to the live system, so her answers come from real data, and she knows
+> who she's talking to."
+
+**Demo her live — type these exact questions:**
+
+1. *(signed out or as a candidate)* **"What jobs are open right now?"** — she lists
+   the actual vacancies from the database, with departments, closing dates and
+   days remaining. Try **"What's closing soon?"** for the most urgent deadlines.
+2. *(as a signed-in candidate)* **"What's the status of my application?"** — she
+   looks up that candidate's own applications and reads their real statuses back,
+   by name.
+3. *(as an admin)* **"Which jobs are awaiting review?"** — she reads the live
+   approval pipeline and lists exactly which listings are sitting at department
+   review and which are at final approval. Try **"How many applications do we
+   have?"** for a live status breakdown.
+
+> "Notice she answered differently depending on who was signed in — a guest never
+> sees internal-only listings, and only admins get pipeline data. She still handles
+> all the everyday questions — registration, password resets, documents, drone
+> permits, even how to become a pilot — and every question she's asked is logged,
+> so we can see exactly what's confusing candidates and feed that into the
+> analytics dashboard."
 
 ---
 
 ## 3. HR / Admin Experience Walkthrough
 
 > "Now let's switch to what your HR and recruitment team sees day to day."
+
+### The job-approval workflow (do this one live, start to finish)
+> "In a government institution, a job advert shouldn't go public because one person
+> clicked a button. So publishing here is a governed pipeline: an HR officer drafts
+> the listing, the Head of Department reviews it, and the Director of HR &
+> Administration gives final approval — every step recorded, every decline
+> requiring a written reason that goes back to the author."
+
+**Live demo sequence (~3 minutes):**
+1. In **Create Job**, create a listing — point out you can start from a saved
+   template or import an existing PDF advert and the form pre-fills itself.
+2. Click **Save & submit for review** — note the status badge flips to *Pending
+   Review* and the HOD is notified by email.
+3. Open the **Review Job** tab — "this is the Head of Department's queue" — use
+   *Preview as candidate* to show exactly what would go live, then **Approve**.
+4. Open **Approve & Publish** — "and this is the Director's final gate" —
+   **Approve & Publish**.
+5. Switch to the public **Vacancies** page — the job is now live for candidates,
+   seconds later. *(Optionally: show Decline on a second listing — the reason is
+   mandatory, and the job goes back to draft with the feedback attached.)*
+
+> "Nothing reaches a candidate without two sign-offs, and the audit log holds who
+> approved what and when. A Super Admin can bypass the chain in an emergency — and
+> that bypass is itself logged."
 
 ### Applications management
 > "HR can review, shortlist, decline, or move a candidate to interview — individually
@@ -130,11 +171,15 @@ Drive this live in the browser. Talking points per screen:
 > thousand concurrent users, which is well beyond what a national aviation authority's
 > recruitment cycles need, even at peak.
 >
-> And this isn't a 'build it once and hope' project — as recently as today, we ran a
-> deliberate quality pass and caught and fixed three real issues before they'd ever
-> reach a candidate: a stale data bug affecting the public job listing, a
-> cross-device session bug, and a login performance issue. That's the kind of active
-> engineering process this system gets — not a one-time delivery."
+> And this isn't a 'build it once and hope' project — as recently as yesterday we
+> ran a full end-to-end verification pass: twelve automated API tests covering the
+> entire job-approval workflow, and nine automated browser tests that log in, click
+> through the review-and-approve pipeline, and interrogate Martha, exactly the way
+> a real user would. That pass caught and fixed three real issues before they'd
+> ever reach a user — including a session-timing bug that could leave an
+> approver's queue looking empty, and a data-visibility gap between admin and
+> public views. That's the kind of active engineering process this system gets —
+> not a one-time delivery."
 
 ---
 
@@ -148,10 +193,11 @@ Drive this live in the browser. Talking points per screen:
 | CV/profile builder | ❌ Generic/unknown | ✅ Uganda-curriculum-aware, with document upload |
 | Automated screening | ❌ None | ✅ Criteria & CGPA-based bulk auto-screening |
 | Role-based admin access | ❌ Unknown/likely flat | ✅ 3 roles + per-admin permission overrides |
+| Job publishing governance | ❌ None visible | ✅ Draft → HOD review → Director approval, declines with mandatory reasons |
 | Audit trail | ❌ Not visible | ✅ Every admin action logged & queryable |
 | Reporting | ❌ Not visible | ✅ 10 PDF report types on demand |
 | Analytics on candidate behaviour | ❌ None | ✅ Full funnel + search analytics |
-| Candidate self-service FAQ | ❌ None | ✅ "Martha" assistant, logged & analyzed |
+| Candidate self-service assistant | ❌ None | ✅ "Martha" — answers from live data (vacancies, deadlines, your application status, admin pipeline), logged & analyzed |
 | Internal vs. external job visibility | ❌ Unknown | ✅ Enforced server-side by verified staff registry |
 | Security | Legacy ASP.NET Web Forms | JWT + refresh rotation, bcrypt, rate limiting, RBAC |
 
@@ -168,6 +214,21 @@ Drive this live in the browser. Talking points per screen:
 
 ---
 
-*Notes to self before presenting: warm up the backend (hit the live URL once) a
-couple of minutes before you go on stage, since a cold first request can be slow —
-everything after that is fast.*
+## Pre-stage checklist (15 minutes before)
+
+1. **Warm everything up.** Open the live site, browse Vacancies, and log in to the
+   HR Console once. This wakes the backend AND warms its database connection pool —
+   the first connection to the remote database can be slow, and a warm pool makes
+   every demo click fast. Click around for a full minute.
+2. **Stage the pipeline.** Create one draft job and submit it for review *before*
+   you go on, so the Review tab already has something in it if you need to jump
+   straight there — then create a second one live on stage for the full
+   draft-to-published story.
+3. **Test Martha's three demo questions** once, in order, so you know exactly what
+   she'll say: "What jobs are open right now?" → "What's the status of my
+   application?" (candidate account) → "Which jobs are awaiting review?" (admin).
+4. **Have both logins on a sticky note** (admin + a demo candidate) — don't type
+   from memory under stage lights.
+5. **Plan B:** keep a screen recording of the full flow from your rehearsal on the
+   desktop. If the venue network dies, narrate over the recording without missing
+   a beat.*
