@@ -5,8 +5,33 @@
 //     error logger plugins, and sandbox detection (port/host/strictPort).
 // You can pass additional config via defineConfig({ vite: { ... }, etc... }) if needed.
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
+import { loadEnv } from "vite";
+
+// vite.config does not auto-inject .env into process.env for proxy target resolution.
+const env = loadEnv(process.env.MODE ?? "development", process.cwd(), "");
+const apiProxyTarget = env.VITE_DEV_API_PROXY || process.env.VITE_DEV_API_PROXY || "http://localhost:8080";
 
 export default defineConfig({
+  vite: {
+    server: {
+      // Local independent hosting: browser calls same-origin /api, Vite forwards to the Java API.
+      // Override with VITE_DEV_API_PROXY (e.g. http://localhost:8080).
+      proxy: {
+        "/api": {
+          target: apiProxyTarget,
+          changeOrigin: true,
+          // Browser still sends Origin on same-origin /api calls; Vite forwards it to
+          // Java, which then rejects with 403 Invalid CORS unless 8081 is allowlisted.
+          // Drop Origin so the proxied hop is treated as a non-browser server call.
+          configure: (proxy) => {
+            proxy.on("proxyReq", (proxyReq) => {
+              proxyReq.removeHeader("origin");
+            });
+          },
+        },
+      },
+    },
+  },
   nitro: {
     preset: "netlify",
     output: {

@@ -8,9 +8,9 @@ import {
   Scripts,
 } from "@tanstack/react-router";
 
-import appCss from "../styles.css?url";
-import { AppProvider } from "@/context/AppContext";
-import { AppShell } from "@/components/AppShell";
+import appCss from "../styles/index.css?url";
+import { AppProvider } from "@/app/providers/AppContext";
+import { AppShell } from "@/app/layouts/AppShell";
 
 function NotFoundComponent() {
   return (
