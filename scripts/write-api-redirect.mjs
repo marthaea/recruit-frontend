@@ -1,15 +1,24 @@
 import { appendFile, mkdir } from "node:fs/promises";
 
 const backendOrigin = process.env.BACKEND_API_URL?.trim().replace(/\/+$/, "");
-const isNetlifyBuild = process.env.NETLIFY === "true" || process.env.CONTEXT != null;
+const context = process.env.CONTEXT ?? "";
+const isNetlifyBuild = process.env.NETLIFY === "true" || context !== "";
+const isProductionDeploy = context === "production";
 
 if (!backendOrigin) {
-  if (isNetlifyBuild) {
+  if (isProductionDeploy) {
     throw new Error(
-      "BACKEND_API_URL is required on Netlify. Set it to the API origin only (no trailing /api), e.g. https://api.example.com",
+      "BACKEND_API_URL is required for Netlify production. Set it to the API origin only (no trailing /api), e.g. https://api.example.com",
     );
   }
-  console.log("BACKEND_API_URL is not set; skipping the optional Netlify API proxy.");
+
+  if (isNetlifyBuild) {
+    console.warn(
+      `BACKEND_API_URL is not set (CONTEXT=${context || "unknown"}). Skipping /api proxy for this deploy preview/build.`,
+    );
+  } else {
+    console.log("BACKEND_API_URL is not set; skipping the optional Netlify API proxy.");
+  }
   process.exit(0);
 }
 

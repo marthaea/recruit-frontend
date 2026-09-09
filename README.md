@@ -23,7 +23,7 @@ Set these in **Site settings → Environment variables**:
 
 | Variable | Required | Value |
 | --- | --- | --- |
-| `BACKEND_API_URL` | Yes | Backend origin only, no trailing `/api`. Example: `http://YOUR_API_HOST:8082` |
+| `BACKEND_API_URL` | Yes (production) | Backend origin only, no trailing `/api`. Example: `http://YOUR_API_HOST:8082`. Deploy previews build without it, but `/api` proxying will be missing until it is set for all contexts. |
 | `VITE_API_URL` | No | Leave empty so the browser uses same-origin `/api` (proxied by Netlify) |
 
 The production build writes `dist/_redirects`:
