@@ -69,9 +69,14 @@ Production: set `SEED_DEMO=true` and `SEED_ALLOW_PRODUCTION=true` when running t
 ```bash
 npm ci
 npm run dev
+npm run verify    # typecheck + production build (same as CI)
 npm run lint
 npm run typecheck
 npm run format:check
 BACKEND_API_URL=http://YOUR_API_HOST:8082 npm run build
 npm run preview
 ```
+
+## Operations
+
+See **[docs/DEPLOYMENT-RUNBOOK.md](docs/DEPLOYMENT-RUNBOOK.md)** for Netlify env vars, server deploy, seeding, and production smoke checks.
