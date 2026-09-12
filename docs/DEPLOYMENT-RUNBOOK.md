@@ -7,8 +7,8 @@ Frontend (Netlify) and backend (Docker on your server) are deployed independentl
 | Layer | Where |
 | --- | --- |
 | Frontend | Netlify site **recruitfront** (e.g. `https://recruitfront.netlify.app`) |
-| API | `https://api.mukasamatthew.com` (Nginx Proxy Manager → host `:8082` / `caa-api`) |
-| API (direct, ops) | `http://67.205.157.80:8082` |
+| API | `https://api.mukasamatthew.com` only (NPM → `caa-api` on Docker network) |
+| API (SSH on server) | `http://127.0.0.1:8082` for local ops — **not** exposed on the public IP |
 | Database | PostgreSQL in Docker on the same host (`/opt/caa-recruitment`) |
 
 ## Netlify (frontend)
@@ -43,7 +43,7 @@ Frontend (Netlify) and backend (Docker on your server) are deployed independentl
 
 Path on server: `/opt/caa-recruitment` (`docker compose`).
 
-**Public API hostname:** Cloudflare DNS `api.mukasamatthew.com` → Nginx Proxy Manager (`/opt/npm`, container `npm-app-1`) → `172.17.0.1:8082` → `caa-api`. TLS is terminated at NPM (Let’s Encrypt cert `npm-5`).
+**Public API hostname:** Cloudflare DNS `api.mukasamatthew.com` → Nginx Proxy Manager (`npm-app-1` on `caa-net`) → `http://caa-api:8080`. Port **8082** is bound to **127.0.0.1** on the host only (no `http://SERVER_IP:8082` from the internet).
 
 ### Routine API update
 
@@ -77,9 +77,8 @@ export SEED_ALLOW_PRODUCTION=true
 
 ```bash
 curl -sS https://api.mukasamatthew.com/api/jobs | head -c 200
-curl -sS -X POST http://67.205.157.80:8082/api/auth/login \
-  -H 'Content-Type: application/json' \
-  -d '{"email":"admin@caa.go.ug","password":"Admin@2026"}'
+# On the server only (localhost):
+curl -sS http://127.0.0.1:8082/ping
 ```
 
 ## Demo vs real production data
