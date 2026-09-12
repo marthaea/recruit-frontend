@@ -64,6 +64,15 @@ export function MarthaAvatar({ size = 40, className = "", talking = false, wavin
           50% { transform: rotate(-4deg); }
           75% { transform: rotate(14deg); }
         }
+        /* These loops run continuously, site-wide, any time the avatar is on
+           screen — including the closed toggle button on every single page.
+           Respect a visitor's OS-level reduced-motion preference instead of
+           ignoring it entirely. */
+        @media (prefers-reduced-motion: reduce) {
+          .martha-breathe, .martha-eyes, .martha-brows, .martha-mouth-talk, .martha-wave {
+            animation: none;
+          }
+        }
       `}</style>
 
       <g className="martha-breathe">

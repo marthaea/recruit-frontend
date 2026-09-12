@@ -62,7 +62,7 @@ export const A_LEVEL_SUBJECTS = [
 ];
 export const O_LEVEL_GRADES = ["D1", "D2", "C3", "C4", "C5", "C6", "P7", "P8", "F9"];
 export const A_LEVEL_GRADES = ["A", "B", "C", "D", "E", "O", "F"];
-export const QUAL_LEVELS = ["O-Level", "A-Level", "Certificate", "Diploma", "Degree", "Masters", "PhD"] as const;
+export const QUAL_LEVELS = ["O-Level", "A-Level", "Certificate", "Diploma", "Degree", "Postgraduate", "Masters", "PhD"] as const;
 export const SALARY_BANDS = ["UG1", "UG2", "UG3", "UG4", "UG5", "UG6", "UG7"];
 export const EMPLOYMENT_TYPES = ["Full-time", "Contract", "Fixed Term Contract"] as const;
 export const DEPARTMENTS = [
@@ -77,7 +77,7 @@ export const DEPARTMENTS = [
 
 export const LOCATIONS = [
   "Entebbe International Airport",
-  "CAA Head Office — Entebbe",
+  "UCAA Head Office — Entebbe",
   "Kampala HQ",
   "Gulu Aerodrome",
   "Jinja Aerodrome",

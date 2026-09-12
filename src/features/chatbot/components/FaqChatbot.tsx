@@ -3,6 +3,7 @@ import { X, Send, ChevronDown } from "lucide-react";
 import { MarthaAvatar } from "./MarthaAvatar";
 import { useApp, type Job, type Application } from "@/app/providers/AppContext";
 import { chatbot as chatbotApi } from "@/services/api/client";
+import { useModalA11y } from "@/hooks/useModalA11y";
 
 // ── FAQ data — keyword arrays must be lowercase ───────────────────────────────
 // followUps entries must exactly match another entry's `question` string so the
@@ -30,7 +31,7 @@ const FAQS: FaqEntry[] = [
     question: "How do I create a new account?",
     audience: CANDIDATE_PERSONAS,
     answer:
-      "Click the 'Register' link on the login page. Provide a valid email address (external candidates should NOT use @caa.co.ug) and a password. Your email will be used for verification and all recruitment communications, so make sure it is correct.",
+      "Click the 'Register' link on the login page. Provide a valid email address (external candidates should NOT use @caa.go.ug) and a password. Your email will be used for verification and all recruitment communications, so make sure it is correct.",
     keywords: ["register", "create account", "sign up", "new account", "account"],
     followUps: ["How do I apply for a job?", "How can I find available jobs?", "I forgot my password. How can I reset it?"],
   },
@@ -46,16 +47,16 @@ const FAQS: FaqEntry[] = [
     question: "My login is not working. What should I do?",
     audience: CANDIDATE_PERSONAS,
     answer:
-      "Double-check your email address and password for typos, and make sure Caps Lock is off. External candidates must not use an @caa.co.ug email. Try resetting your password via 'Forgot Password?'. If the problem continues, contact HR support with your registered email.",
+      "Double-check your email address and password for typos, and make sure Caps Lock is off. External candidates must not use an @caa.go.ug email. Try resetting your password via 'Forgot Password?'. If the problem continues, contact HR support with your registered email.",
     keywords: ["login", "log in", "sign in", "not working", "can't login", "cannot login", "access", "error"],
-    followUps: ["I forgot my password. How can I reset it?", "Where are CAA offices located and how do I contact them?"],
+    followUps: ["I forgot my password. How can I reset it?", "Where are UCAA offices located and how do I contact them?"],
   },
   {
-    question: "How do I log in as internal CAA staff?",
+    question: "How do I log in as internal UCAA staff?",
     audience: CANDIDATE_PERSONAS,
     answer:
-      "Use your official CAA email address (ending in @caa.co.ug) and your password. The portal automatically recognises you as an internal candidate based on your email domain, giving you access to internal-only vacancies.",
-    keywords: ["internal", "staff", "caa email", "caa.co.ug", "internal login", "employee login"],
+      "Use your official UCAA email address (ending in @caa.go.ug) and your password. The portal automatically recognises you as an internal candidate based on your email domain, giving you access to internal-only vacancies.",
+    keywords: ["internal", "staff", "caa email", "caa.go.ug", "internal login", "employee login"],
     followUps: ["How can I view internal-only job listings?", "Can I apply for more than one vacancy?"],
   },
   {
@@ -88,7 +89,7 @@ const FAQS: FaqEntry[] = [
     answer:
       "On the 'Vacancies' page, use the Department and Location filters to refine your search, then click 'Apply Filters'.",
     keywords: ["filter", "department", "location", "refine", "narrow"],
-    followUps: ["What departments exist at CAA?", "How do I apply for a job?"],
+    followUps: ["What departments exist at UCAA?", "How do I apply for a job?"],
   },
   {
     question: "What information is on a job details page?",
@@ -102,9 +103,9 @@ const FAQS: FaqEntry[] = [
     question: "How can I view internal-only job listings?",
     audience: CANDIDATE_PERSONAS,
     answer:
-      "Log in with your @caa.co.ug email. The 'Vacancies' page will then display both public and internal-only listings; internal listings are clearly marked.",
+      "Log in with your @caa.go.ug email. The 'Vacancies' page will then display both public and internal-only listings; internal listings are clearly marked.",
     keywords: ["internal jobs", "internal listings", "internal only", "internal vacancies"],
-    followUps: ["How do I log in as internal CAA staff?", "Can I apply for more than one vacancy?"],
+    followUps: ["How do I log in as internal UCAA staff?", "Can I apply for more than one vacancy?"],
   },
   // ── Applying ─────────────────────────────────────────────────────────────────
   {
@@ -221,7 +222,7 @@ const FAQS: FaqEntry[] = [
     answer:
       "If selected, you will receive an offer via email and your dashboard status will change to 'Offered'. Contact the HR team at hr@caa.go.ug to accept or discuss the offer terms.",
     keywords: ["offer", "job offer", "accepted", "offered", "accept offer", "reject offer"],
-    followUps: ["Why work at CAA? What are the benefits?", "Where are CAA offices located and how do I contact them?"],
+    followUps: ["Why work at UCAA? What are the benefits?", "Where are UCAA offices located and how do I contact them?"],
   },
   // ── HR Console — Applications ─────────────────────────────────────────────────
   {
@@ -236,7 +237,7 @@ const FAQS: FaqEntry[] = [
     question: "How do I shortlist a candidate?",
     audience: ADMIN_PERSONAS,
     answer:
-      "Open the application detail view and update the status to 'Shortlisted'. Add any relevant notes. The candidate will automatically receive a notification. From there, candidates move to 'Shortlisted II' for CV panel scoring before advancing to Interview — see 'How does CV panel scoring (Shortlisted II) work?' for that step.",
+      "Open the application detail view and update the status to 'Shortlisted', or run the auto-screening tool against a whole batch at once. Either way, once you confirm the results you're asked what's next: send the shortlisted group on to 'Shortlisted II' for CV panel scoring, or skip straight to inviting them for an assessment — see 'How does CV panel scoring (Shortlisted II) work?' for the panel-scoring step.",
     keywords: ["shortlist candidate", "shortlisting", "how to shortlist"],
     followUps: ["How does CV panel scoring (Shortlisted II) work?", "How do I schedule an interview?"],
   },
@@ -244,9 +245,9 @@ const FAQS: FaqEntry[] = [
     question: "How does CV panel scoring (Shortlisted II) work?",
     audience: ADMIN_PERSONAS,
     answer:
-      "The 'Shortlisting II' tab lets every admin on the panel score a candidate's CV independently, out of 100, with an optional comment — each panelist's own score and comment are visible to the rest of the panel (never to the candidate), and the system shows a running average per candidate. You can download a candidate's CV individually, or select several applicants in the Applications tab to download their CVs together as one zip file (only candidates who actually submitted a CV are included). 'Auto-shortlist by score' advances everyone averaging at or above a threshold you set to Interview, and declines the rest. You can also export the list to CSV for offline scoring and re-import the completed scores in bulk.",
+      "The 'Shortlisting II' tab lets every admin on the panel score a candidate's CV independently, out of 100, with an optional comment — each panelist's own score and comment are visible to the rest of the panel (never to the candidate), and the system shows a running average per candidate. You can download a candidate's CV individually, or select several applicants in the Applications tab to download their CVs together as one zip file (only candidates who actually submitted a CV are included). 'Auto-shortlist by score' declines everyone averaging below a threshold you set, and asks you to pick an assessment type and schedule to invite everyone at or above it — nobody is auto-advanced without you choosing the next step. You can also export the list to CSV for offline scoring and re-import the completed scores in bulk.",
     keywords: ["shortlisted ii", "shortlisting ii", "panel scoring", "score candidate", "cv scoring", "candidate score", "marks out of 100", "download cv", "batch cv", "zip cv"],
-    followUps: ["How do I schedule an interview?", "How do I review applications in the HR Console?"],
+    followUps: ["Can I schedule or record assessments for several candidates at once?", "How do I review applications in the HR Console?"],
   },
   {
     question: "How do I schedule an interview?",
@@ -254,7 +255,23 @@ const FAQS: FaqEntry[] = [
     answer:
       "From the detailed application view, select the option to schedule an interview. Specify the interviewer, date, time, and location. The candidate will be notified by email.",
     keywords: ["schedule interview", "interview scheduling", "book interview", "set interview"],
-    followUps: ["How do I extend a job offer to a candidate?", "How do I review applications in the HR Console?"],
+    followUps: ["How do I set up an interview panel?", "How do I extend a job offer to a candidate?"],
+  },
+  {
+    question: "How do I set up an interview panel?",
+    audience: ADMIN_PERSONAS,
+    answer:
+      "Go to the 'Interview Panel' tab and pick the job you're staffing. Choose from the available staff list to add someone to the panel — they get an automatic email invitation the moment you add them. Remove a panelist the same way if plans change.",
+    keywords: ["interview panel", "panel", "add panelist", "panel invite", "select panel", "who is on the panel", "staff panel"],
+    followUps: ["How do I schedule an interview?", "How do I review applications in the HR Console?"],
+  },
+  {
+    question: "Where can I see the accountability record for a shortlisting run?",
+    audience: ADMIN_PERSONAS,
+    answer:
+      "The 'Shortlisting Reports' tab records every auto-shortlist and CGPA screen that's been run — who ran it, the threshold or criteria used, and a full pass/fail breakdown with the specific reason behind each candidate's outcome. Use it to answer 'why was this candidate declined?' with a real, timestamped record instead of guessing after the fact.",
+    keywords: ["shortlisting reports", "accountability", "audit shortlist", "why was declined", "shortlist reason", "screening record", "who ran the screen"],
+    followUps: ["How do I shortlist a candidate?", "How do I view the audit log?"],
   },
   {
     question: "How do I extend a job offer to a candidate?",
@@ -287,7 +304,23 @@ const FAQS: FaqEntry[] = [
     answer:
       "From the 'Create Job' tab's job listing table, use the Edit action to change a vacancy's status, or Del to remove it entirely. A vacancy stops accepting applications once its closing date passes.",
     keywords: ["publish", "close vacancy", "close job", "job status", "activate job"],
-    followUps: ["How do I create a new job vacancy?", "Where can I find recruitment reports and analytics?"],
+    followUps: ["How do I create a new job vacancy?", "How do I set which assessments a job requires?"],
+  },
+  {
+    question: "How do I set which assessments a job requires?",
+    audience: ADMIN_PERSONAS,
+    answer:
+      "In 'Create Job', every role has a compulsory Assessment 1 — pick Written, Psychometric, Interview, or Practical — and an optional Assessment 2 you can switch on with its own type. Candidates only ever see the assessment cards that apply to their specific job.",
+    keywords: ["assessment 1", "assessment 2", "which assessment", "assessment type", "configure assessment", "second assessment", "required assessments"],
+    followUps: ["Can I schedule or record assessments for several candidates at once?", "How do I schedule an interview?"],
+  },
+  {
+    question: "Can I schedule or record assessments for several candidates at once?",
+    audience: ADMIN_PERSONAS,
+    answer:
+      "Yes. On the 'Assessment Schedule' and 'Candidate Assessment' tabs, switch to the Batch view: filter by vacancy and assessment type, select as many candidates as you like, then either apply one shared date/time/venue to the whole group (scheduling) or enter each candidate's own score and outcome in one table before saving (recording).",
+    keywords: ["batch schedule", "batch record", "schedule multiple", "record multiple", "bulk assessment", "select all candidates assessment", "multiple candidates assessment"],
+    followUps: ["How do I set which assessments a job requires?", "How do I schedule an interview?"],
   },
   // ── HR Console — Reports ──────────────────────────────────────────────────────
   {
@@ -296,7 +329,15 @@ const FAQS: FaqEntry[] = [
     answer:
       "HR Directors and Super Admins can access the 'Reports & Exports' tab for application statistics, time-to-hire metrics, diversity reports, and every report card has both a PDF and a CSV download. In the Applications tab itself, you can also export the current filtered list to CSV, or select candidates and download their CVs together as one zip file. Recruiters can view high-level metrics on their dashboard only.",
     keywords: ["reports", "analytics", "export", "statistics", "csv", "excel", "time to hire", "export csv", "download csv"],
-    followUps: ["How do I view the audit log?", "How does CV panel scoring (Shortlisted II) work?"],
+    followUps: ["Where can I see visitor activity on the careers portal?", "How does CV panel scoring (Shortlisted II) work?"],
+  },
+  {
+    question: "Where can I see visitor activity on the careers portal?",
+    audience: ADMIN_PERSONAS,
+    answer:
+      "The 'Site Analytics' tab shows real page views, job views, apply clicks, and searches from the last 7 and 30 days, plus the most viewed jobs, top searches, and a log of every question visitors have asked me — including the ones I couldn't answer confidently, so HR can add better content over time.",
+    keywords: ["site analytics", "visitor activity", "page views", "who is visiting", "traffic", "portal analytics", "martha questions", "chatbot log"],
+    followUps: ["Where can I find recruitment reports and analytics?", "How do I view the audit log?"],
   },
   // ── System & Settings ─────────────────────────────────────────────────────────
   {
@@ -323,39 +364,39 @@ const FAQS: FaqEntry[] = [
     keywords: ["permissions", "roles", "access control", "user roles", "manage users", "assign rights"],
     followUps: ["How do I manage system settings?", "How do I access the HR Console?"],
   },
-  // ── About CAA ─────────────────────────────────────────────────────────────────
+  // ── About UCAA ─────────────────────────────────────────────────────────────────
   {
     question: "What is the Civil Aviation Authority of Uganda?",
     answer:
       "The Uganda Civil Aviation Authority (UCAA) is the government agency responsible for regulating civil aviation in Uganda, operating under the Ministry of Works and Transport. We oversee aviation safety and security, license aviation personnel and operators, provide air navigation services, and manage Entebbe International Airport along with several upcountry aerodromes.",
     keywords: ["what is caa", "about caa", "ucaa", "civil aviation authority", "who is caa", "about", "caa information"],
-    followUps: ["What does CAA do?", "Which airports does CAA manage?", "Why work at CAA? What are the benefits?"],
+    followUps: ["What does UCAA do?", "Which airports does UCAA manage?", "Why work at UCAA? What are the benefits?"],
   },
   {
-    question: "What does CAA do?",
+    question: "What does UCAA do?",
     answer:
       "Our core functions include: regulating aviation safety and security; licensing pilots, engineers, and other aviation personnel; certifying air operators and registering aircraft; providing air navigation services; managing airports; regulating the economics of the air transport industry; and advising the government on civil aviation matters.",
     keywords: ["what does caa do", "mandate", "functions", "role of caa", "responsibilities", "caa work"],
-    followUps: ["Which airports does CAA manage?", "What are the drone regulations in Uganda?", "What departments exist at CAA?"],
+    followUps: ["Which airports does UCAA manage?", "What are the drone regulations in Uganda?", "What departments exist at UCAA?"],
   },
   {
-    question: "What are CAA's mission and values?",
+    question: "What are UCAA's mission and values?",
     answer:
       "Our mission is to promote a safe, secure, efficient, and environmentally responsible civil aviation industry in Uganda. Our core values include safety, integrity, professionalism, customer focus, and teamwork. These values guide everything we do — including how we recruit.",
     keywords: ["mission", "values", "vision", "core values", "culture"],
-    followUps: ["What is the Civil Aviation Authority of Uganda?", "Is CAA an equal opportunity employer?"],
+    followUps: ["What is the Civil Aviation Authority of Uganda?", "Is UCAA an equal opportunity employer?"],
   },
   {
-    question: "Which airports does CAA manage?",
+    question: "Which airports does UCAA manage?",
     answer:
-      "CAA manages Entebbe International Airport — Uganda's main international gateway — as well as upcountry aerodromes including Arua, Gulu, Kasese, Kidepo, Kisoro, Mbarara, Moroto, Pakuba, Soroti, and Tororo.",
+      "UCAA manages Entebbe International Airport — Uganda's main international gateway — as well as upcountry aerodromes including Arua, Gulu, Kasese, Kidepo, Kisoro, Mbarara, Moroto, Pakuba, Soroti, and Tororo.",
     keywords: ["airports", "aerodromes", "entebbe", "which airports", "airfields", "international airport"],
-    followUps: ["What does CAA do?", "How do I lodge a complaint about a flight or airline?"],
+    followUps: ["What does UCAA do?", "How do I lodge a complaint about a flight or airline?"],
   },
   {
-    question: "What departments exist at CAA?",
+    question: "What departments exist at UCAA?",
     answer:
-      "CAA's major directorates include Air Traffic Management; Airports and Aviation Security; Safety, Security and Economic Regulation; Human Resource and Administration; Finance; Legal and Board Affairs; and ICT and Communications. Vacancies on this portal indicate which department each role belongs to.",
+      "UCAA's major directorates include Air Traffic Management; Airports and Aviation Security; Safety, Security and Economic Regulation; Human Resource and Administration; Finance; Legal and Board Affairs; and ICT and Communications. Vacancies on this portal indicate which department each role belongs to.",
     keywords: ["departments", "directorates", "divisions", "units", "sections"],
     followUps: ["How do I filter job listings?", "How can I find available jobs?"],
   },
@@ -363,102 +404,102 @@ const FAQS: FaqEntry[] = [
   {
     question: "How do I become a pilot in Uganda?",
     answer:
-      "You train with an approved aviation training organisation — for example the East African Civil Aviation Academy in Soroti — starting with a Private Pilot Licence (PPL) and progressing to a Commercial Pilot Licence (CPL). You must pass medical examinations and licensing exams. All pilot licences in Uganda are issued by CAA's Personnel Licensing office.",
+      "You train with an approved aviation training organisation — for example the East African Civil Aviation Academy in Soroti — starting with a Private Pilot Licence (PPL) and progressing to a Commercial Pilot Licence (CPL). You must pass medical examinations and licensing exams. All pilot licences in Uganda are issued by UCAA's Personnel Licensing office.",
     keywords: ["pilot", "become a pilot", "flying school", "ppl", "cpl", "fly a plane", "aviation school", "flight training"],
-    followUps: ["Does CAA offer aviation training or scholarships?", "How do I become an air traffic controller?"],
+    followUps: ["Does UCAA offer aviation training or scholarships?", "How do I become an air traffic controller?"],
   },
   {
     question: "How do I become an air traffic controller?",
     answer:
-      "Air traffic controllers typically need a science-based degree or diploma, followed by specialised ATC training at an accredited institution. CAA periodically advertises trainee air traffic controller positions on this portal — successful candidates also undergo medical fitness and aptitude assessments.",
+      "Air traffic controllers typically need a science-based degree or diploma, followed by specialised ATC training at an accredited institution. UCAA periodically advertises trainee air traffic controller positions on this portal — successful candidates also undergo medical fitness and aptitude assessments.",
     keywords: ["air traffic controller", "atc", "controller", "air traffic"],
-    followUps: ["How can I find available jobs?", "Does CAA offer aviation training or scholarships?"],
+    followUps: ["How can I find available jobs?", "Does UCAA offer aviation training or scholarships?"],
   },
   {
     question: "What are the drone regulations in Uganda?",
     answer:
-      "Operating a drone (Unmanned Aircraft System) in Uganda requires prior authorization from CAA. You must apply for a permit before importing or flying a drone. Key restrictions include: no flying near airports or aerodromes, over crowds, or beyond prescribed altitudes. Contact CAA directly for the application requirements and current guidelines.",
+      "Operating a drone (Unmanned Aircraft System) in Uganda requires prior authorization from UCAA. You must apply for a permit before importing or flying a drone. Key restrictions include: no flying near airports or aerodromes, over crowds, or beyond prescribed altitudes. Contact UCAA directly for the application requirements and current guidelines.",
     keywords: ["drone", "drones", "uas", "unmanned", "drone permit", "fly a drone", "quadcopter", "drone license"],
-    followUps: ["Where are CAA offices located and how do I contact them?", "What does CAA do?"],
+    followUps: ["Where are UCAA offices located and how do I contact them?", "What does UCAA do?"],
   },
   {
     question: "How do I register an aircraft in Uganda?",
     answer:
-      "Aircraft registration is handled by CAA's Airworthiness section. You submit an application with proof of ownership, insurance documentation, and the aircraft undergoes an airworthiness inspection before a certificate of registration is issued. Contact CAA for the full requirements and fees.",
+      "Aircraft registration is handled by UCAA's Airworthiness section. You submit an application with proof of ownership, insurance documentation, and the aircraft undergoes an airworthiness inspection before a certificate of registration is issued. Contact UCAA for the full requirements and fees.",
     keywords: ["register aircraft", "aircraft registration", "airworthiness", "register a plane"],
-    followUps: ["How do I get an Air Operator Certificate?", "Where are CAA offices located and how do I contact them?"],
+    followUps: ["How do I get an Air Operator Certificate?", "Where are UCAA offices located and how do I contact them?"],
   },
   {
     question: "How do I get an Air Operator Certificate?",
     answer:
-      "To operate an airline or charter service in Uganda, you need an Air Operator Certificate (AOC) from CAA. Certification follows a five-phase process: pre-application, formal application, document evaluation, demonstration and inspection, and final certification. The Flight Safety directorate guides applicants through each phase.",
+      "To operate an airline or charter service in Uganda, you need an Air Operator Certificate (AOC) from UCAA. Certification follows a five-phase process: pre-application, formal application, document evaluation, demonstration and inspection, and final certification. The Flight Safety directorate guides applicants through each phase.",
     keywords: ["aoc", "air operator", "start an airline", "charter", "operator certificate", "airline license"],
-    followUps: ["How do I register an aircraft in Uganda?", "What does CAA do?"],
+    followUps: ["How do I register an aircraft in Uganda?", "What does UCAA do?"],
   },
-  // ── Opportunities & Working at CAA ───────────────────────────────────────────
+  // ── Opportunities & Working at UCAA ───────────────────────────────────────────
   {
-    question: "Does CAA offer internships or industrial training?",
+    question: "Does UCAA offer internships or industrial training?",
     answer:
-      "Yes. CAA periodically offers internship and industrial training placements for students and recent graduates. These opportunities are advertised on this portal under Vacancies when available. Students should apply with an introduction letter from their institution. You can also enquire with HR at hr@caa.go.ug.",
+      "Yes. UCAA periodically offers internship and industrial training placements for students and recent graduates. These opportunities are advertised on this portal under Vacancies when available. Students should apply with an introduction letter from their institution. You can also enquire with HR at hr@caa.go.ug.",
     keywords: ["internship", "intern", "industrial training", "placement", "student", "attachment", "graduate trainee"],
-    followUps: ["How can I find available jobs?", "Does CAA offer aviation training or scholarships?"],
+    followUps: ["How can I find available jobs?", "Does UCAA offer aviation training or scholarships?"],
   },
   {
-    question: "Does CAA offer aviation training or scholarships?",
+    question: "Does UCAA offer aviation training or scholarships?",
     answer:
-      "The East African Civil Aviation Academy in Soroti trains pilots, aircraft maintenance engineers, and flight dispatchers. CAA also invests in continuous staff development, including internationally recognised aviation courses. Scholarship or sponsored-training opportunities, when available, are announced publicly.",
+      "The East African Civil Aviation Academy in Soroti trains pilots, aircraft maintenance engineers, and flight dispatchers. UCAA also invests in continuous staff development, including internationally recognised aviation courses. Scholarship or sponsored-training opportunities, when available, are announced publicly.",
     keywords: ["scholarship", "training", "academy", "soroti", "study aviation", "aviation course", "sponsorship"],
-    followUps: ["How do I become a pilot in Uganda?", "Does CAA offer internships or industrial training?"],
+    followUps: ["How do I become a pilot in Uganda?", "Does UCAA offer internships or industrial training?"],
   },
   {
-    question: "Why work at CAA? What are the benefits?",
+    question: "Why work at UCAA? What are the benefits?",
     answer:
-      "Working at CAA means contributing to the safety of everyone who flies in Uganda. Staff enjoy competitive remuneration, medical cover, pension benefits, and exceptional professional development — including specialised aviation training with international bodies like ICAO. You will work with dedicated professionals in a mission-driven organisation.",
+      "Working at UCAA means contributing to the safety of everyone who flies in Uganda. Staff enjoy competitive remuneration, medical cover, pension benefits, and exceptional professional development — including specialised aviation training with international bodies like ICAO. You will work with dedicated professionals in a mission-driven organisation.",
     keywords: ["benefits", "why work", "perks", "salary and benefits", "staff benefits", "working at caa", "career growth"],
-    followUps: ["How can I find available jobs?", "Is CAA an equal opportunity employer?", "What are CAA's mission and values?"],
+    followUps: ["How can I find available jobs?", "Is UCAA an equal opportunity employer?", "What are UCAA's mission and values?"],
   },
   {
-    question: "Is CAA an equal opportunity employer?",
+    question: "Is UCAA an equal opportunity employer?",
     answer:
-      "Absolutely. CAA is committed to merit-based, transparent recruitment and welcomes applications from all qualified candidates regardless of gender, disability, religion, or ethnicity. Every application submitted through this portal goes through the same fair review process.",
+      "Absolutely. UCAA is committed to merit-based, transparent recruitment and welcomes applications from all qualified candidates regardless of gender, disability, religion, or ethnicity. Every application submitted through this portal goes through the same fair review process.",
     keywords: ["equal opportunity", "diversity", "disability", "gender", "fair", "discrimination", "inclusive"],
-    followUps: ["How do I apply for a job?", "What are CAA's mission and values?"],
+    followUps: ["How do I apply for a job?", "What are UCAA's mission and values?"],
   },
   // ── Contact & Public Services ─────────────────────────────────────────────────
   {
-    question: "Where are CAA offices located and how do I contact them?",
+    question: "Where are UCAA offices located and how do I contact them?",
     answer:
-      "CAA's head office is located at Entebbe International Airport, Airport Road, Entebbe — P.O. Box 5536, Kampala. You can call +256-41-4352 000 or email the HR team at hr@caa.go.ug for recruitment matters. Office hours are Monday to Friday, 8:00 AM to 5:00 PM.",
+      "UCAA's head office is located at Entebbe International Airport, Airport Road, Entebbe — P.O. Box 5536, Kampala. You can call +256-41-4352 000 or email the HR team at hr@caa.go.ug for recruitment matters. Office hours are Monday to Friday, 8:00 AM to 5:00 PM.",
     keywords: ["contact", "location", "address", "phone", "office", "where is caa", "reach", "email caa", "call"],
-    followUps: ["Who can I contact for technical support?", "Which airports does CAA manage?"],
+    followUps: ["Who can I contact for technical support?", "Which airports does UCAA manage?"],
   },
   {
     question: "How do I lodge a complaint about a flight or airline?",
     answer:
-      "Start by raising the issue with your airline — they are your first point of contact for delays, cancellations, lost baggage, or refunds. If the airline does not resolve it satisfactorily, you can escalate to CAA's consumer affairs team with your booking details, correspondence, and a description of the issue.",
+      "Start by raising the issue with your airline — they are your first point of contact for delays, cancellations, lost baggage, or refunds. If the airline does not resolve it satisfactorily, you can escalate to UCAA's consumer affairs team with your booking details, correspondence, and a description of the issue.",
     keywords: ["complaint", "delayed flight", "cancelled", "refund", "airline complaint", "passenger rights", "lost baggage", "lost luggage"],
-    followUps: ["Where are CAA offices located and how do I contact them?", "Which airports does CAA manage?"],
+    followUps: ["Where are UCAA offices located and how do I contact them?", "Which airports does UCAA manage?"],
   },
   {
     question: "Who can I contact for technical support?",
     answer:
-      "For technical issues with this portal, refer to the 'Contact Us' section or reach out to the CAA IT support team directly. For recruitment questions, email hr@caa.go.ug.",
+      "For technical issues with this portal, refer to the 'Contact Us' section or reach out to the UCAA IT support team directly. For recruitment questions, email hr@caa.go.ug.",
     keywords: ["technical support", "support", "it support", "technical issue", "help desk", "bug", "not loading"],
-    followUps: ["My login is not working. What should I do?", "Where are CAA offices located and how do I contact them?"],
+    followUps: ["My login is not working. What should I do?", "Where are UCAA offices located and how do I contact them?"],
   },
   {
     question: "What are the portal's privacy policies?",
     answer:
       "Data privacy details and terms of service are available via the links in the footer of the portal. Your personal information is used only for recruitment purposes and handled in line with applicable data protection laws.",
     keywords: ["privacy", "privacy policy", "terms", "data protection", "gdpr", "personal data", "my data"],
-    followUps: ["How do I update my personal details?", "Is CAA an equal opportunity employer?"],
+    followUps: ["How do I update my personal details?", "Is UCAA an equal opportunity employer?"],
   },
   {
     question: "Who should I contact for HR questions about internal vacancies?",
     answer:
-      "For specific HR questions about internal vacancies or career progression within CAA, contact the HR Department directly at hr@caa.go.ug.",
+      "For specific HR questions about internal vacancies or career progression within UCAA, contact the HR Department directly at hr@caa.go.ug.",
     keywords: ["hr questions", "internal vacancies question", "career progression", "contact hr", "hr department", "talk to hr", "speak to hr", "human resource"],
-    followUps: ["How can I view internal-only job listings?", "How do I log in as internal CAA staff?"],
+    followUps: ["How can I view internal-only job listings?", "How do I log in as internal UCAA staff?"],
   },
 ];
 
@@ -479,14 +520,14 @@ const ROLE_TOPICS: Record<Persona, string[]> = {
   guest: [
     "How do I create a new account?",
     "How do I apply for a job?",
-    "What does CAA do?",
+    "What does UCAA do?",
     "What are the drone regulations in Uganda?",
   ],
   external: [
     "How do I apply for a job?",
     "What is the status of my application?",
     "What documents do I need to submit?",
-    "Why work at CAA? What are the benefits?",
+    "Why work at UCAA? What are the benefits?",
   ],
   internal: [
     "How can I view internal-only job listings?",
@@ -527,9 +568,9 @@ const FALLBACKS = [
 ];
 
 const FALLBACK_TOPICS = [
-  ["How do I apply for a job?", "What does CAA do?", "Where are CAA offices located and how do I contact them?"],
-  ["What is the status of my application?", "Which airports does CAA manage?", "Does CAA offer internships or industrial training?"],
-  ["How can I find available jobs?", "What are the drone regulations in Uganda?", "Why work at CAA? What are the benefits?"],
+  ["How do I apply for a job?", "What does UCAA do?", "Where are UCAA offices located and how do I contact them?"],
+  ["What is the status of my application?", "Which airports does UCAA manage?", "Does UCAA offer internships or industrial training?"],
+  ["How can I find available jobs?", "What are the drone regulations in Uganda?", "Why work at UCAA? What are the benefits?"],
 ];
 
 type SmallTalkRule = {
@@ -544,18 +585,18 @@ const SMALL_TALK: SmallTalkRule[] = [
   {
     test: /\b(who are you|what are you|your name|about you|who is martha)\b/,
     replies: [
-      "I'm Martha! I'm the virtual assistant for the Civil Aviation Authority of Uganda. I help candidates, staff, and the public with questions about careers, our airports, licensing, and anything CAA. I'm not a human, but I do my best to be just as helpful.",
-      "My name is Martha — CAA Uganda's virtual assistant. Think of me as your first point of contact: I can guide you through job applications, aviation questions, and how to reach the right people at CAA.",
+      "I'm Martha! I'm the virtual assistant for the Civil Aviation Authority of Uganda. I help candidates, staff, and the public with questions about careers, our airports, licensing, and anything UCAA. I'm not a human, but I do my best to be just as helpful.",
+      "My name is Martha — UCAA's virtual assistant. Think of me as your first point of contact: I can guide you through job applications, aviation questions, and how to reach the right people at UCAA.",
     ],
     starters: true,
   },
   {
     test: /\bare you (a |an )?(human|real|robot|bot|ai|person)\b/,
     replies: [
-      "I'm a virtual assistant — so a friendly bot, not a human. But I've been trained on everything CAA, so ask away! And if you need a real person, I can point you to the right contact.",
-      "Not human, I'm afraid — I'm CAA's virtual assistant. But I'm here around the clock, which my human colleagues can't say! What can I help you with?",
+      "I'm a virtual assistant — so a friendly bot, not a human. But I've been trained on everything UCAA, so ask away! And if you need a real person, I can point you to the right contact.",
+      "Not human, I'm afraid — I'm UCAA's virtual assistant. But I'm here around the clock, which my human colleagues can't say! What can I help you with?",
     ],
-    followUps: ["Where are CAA offices located and how do I contact them?", "How do I apply for a job?"],
+    followUps: ["Where are UCAA offices located and how do I contact them?", "How do I apply for a job?"],
   },
   {
     test: /\bhow are you\b/,
@@ -585,7 +626,7 @@ const SMALL_TALK: SmallTalkRule[] = [
     test: /\b(joke|make me laugh|something funny)\b/,
     replies: [
       "Why did the aeroplane get sent to its room? Bad altitude! Okay, I'll stick to my day job — what can I help you with?",
-      "What do you call a flying police officer? A heli-copper! Alright, aviation humour isn't my strong suit — but CAA questions definitely are. Try me!",
+      "What do you call a flying police officer? A heli-copper! Alright, aviation humour isn't my strong suit — but UCAA questions definitely are. Try me!",
     ],
     starters: true,
   },
@@ -594,14 +635,14 @@ const SMALL_TALK: SmallTalkRule[] = [
     replies: [
       `${timeGreeting()}! Lovely to hear from you. What can I help you with today?`,
       "Hello there! I'm Martha, always happy to help. What would you like to know?",
-      "Hi! Great to see you. Ask me anything about CAA — jobs, airports, licensing, you name it.",
+      "Hi! Great to see you. Ask me anything about UCAA — jobs, airports, licensing, you name it.",
     ],
     starters: true,
   },
   {
     test: /\b(help|what can you do|options|menu)\b/,
     replies: [
-      "Of course! I can help you with: applying for jobs and tracking applications, your candidate profile and documents, aviation careers (pilots, air traffic controllers), drone permits and licensing, CAA's airports and services, and how to contact the right team. I can also check live information for you — try asking \"What jobs are open right now?\", \"What's closing soon?\", or \"What's the status of my application?\". What interests you?",
+      "Of course! I can help you with: applying for jobs and tracking applications, your candidate profile and documents, aviation careers (pilots, air traffic controllers), drone permits and licensing, UCAA's airports and services, and how to contact the right team. I can also check live information for you — try asking \"What jobs are open right now?\", \"What's closing soon?\", or \"What's the status of my application?\". What interests you?",
     ],
     starters: true,
   },
@@ -648,16 +689,21 @@ function wordsMatch(a: string, b: string): boolean {
   return Math.abs(a.length - b.length) <= maxD && editDistance(a, b) <= maxD;
 }
 
-function scoreEntry(faq: FaqEntry, qNorm: string, qWords: string[], contextBoost: Set<string> | null, persona: Persona): number {
-  let score = 0;
-  // Role bias: candidates and HR Console staff share vocabulary ("shortlist",
-  // "offer", "apply") for entries that mean different things to each of them.
-  // Without this, whichever entry scores marginally higher on raw keywords wins
-  // for everyone, regardless of who's actually asking.
-  if (faq.audience) score += faq.audience.includes(persona) ? 6 : -6;
+type EntryScore = { score: number; keywordScore: number };
+
+// Split into keyword-driven signal (does this entry actually match what was
+// typed?) and bonus signal (persona bias, conversation context) — kept apart
+// because it's possible for every candidate-facing entry to earn the same
+// flat audience bonus regardless of relevance, letting a query with zero real
+// keyword overlap ("what is the meaning of life") still cross the confidence
+// bar to answer outright, just because it shared a persona with 23 other
+// entries. `keywordScore` is checked separately below so bonuses can break
+// ties and bias ranking, but can never manufacture confidence on their own.
+function scoreEntry(faq: FaqEntry, qNorm: string, qWords: string[], contextBoost: Set<string> | null, persona: Persona): EntryScore {
+  let keywordScore = 0;
   for (const kw of faq.keywords) {
     if (qNorm.includes(kw)) {
-      score += kw.length * 2; // exact phrase hit
+      keywordScore += kw.length * 2; // exact phrase hit
       continue;
     }
     // fuzzy hit: the keyword's significant words appear (typo-tolerantly) in the query;
@@ -665,19 +711,30 @@ function scoreEntry(faq: FaqEntry, qNorm: string, qWords: string[], contextBoost
     const kwWords = kw.split(" ").filter((w) => !STOP_WORDS.has(w));
     if (kwWords.length === 0) continue;
     const hits = kwWords.filter((kww) => qWords.some((qw) => wordsMatch(qw, kww))).length;
-    if (hits === kwWords.length) score += kw.length;
-    else if (hits > 0 && hits * 2 >= kwWords.length) score += Math.floor((kw.length * hits) / (kwWords.length * 2));
+    if (hits === kwWords.length) keywordScore += kw.length;
+    else if (hits > 0 && hits * 2 >= kwWords.length) keywordScore += Math.floor((kw.length * hits) / (kwWords.length * 2));
   }
   // light credit for overlap with the question text itself
   for (const w of normalize(faq.question).split(" ")) {
-    if (w.length > 3 && !STOP_WORDS.has(w) && qWords.some((qw) => wordsMatch(qw, w))) score += 2;
+    if (w.length > 3 && !STOP_WORDS.has(w) && qWords.some((qw) => wordsMatch(qw, w))) keywordScore += 2;
   }
+
+  let bonus = 0;
+  // Role bias: candidates and HR Console staff share vocabulary ("shortlist",
+  // "offer", "apply") for entries that mean different things to each of them.
+  // Without this, whichever entry scores marginally higher on raw keywords wins
+  // for everyone, regardless of who's actually asking.
+  if (faq.audience) bonus += faq.audience.includes(persona) ? 6 : -6;
   // stay-on-topic bonus: entries related to the previous answer rank higher
-  if (contextBoost?.has(faq.question)) score += 4;
-  return score;
+  if (contextBoost?.has(faq.question)) bonus += 4;
+
+  return { score: keywordScore + bonus, keywordScore };
 }
 
 const STRONG_MATCH = 8;
+// A confident "answered" reply must be backed by real keyword evidence, not
+// just persona/context bonuses — see the comment on scoreEntry above.
+const MIN_KEYWORD_SCORE = 6;
 
 const SUGGEST_INTROS = [
   "I'm not 100% sure what you mean — is it one of these?",
@@ -698,6 +755,10 @@ type BotReply = {
   matched?: string;
   /** The entry to remember as conversation context. */
   entry?: FaqEntry;
+  /** Winning match's keyword-only score — lets HR's review queue flag
+   *  "answered" results that barely cleared MIN_KEYWORD_SCORE, not just
+   *  outright "suggested"/"fallback" ones. */
+  confidence?: number;
 };
 
 // ── Live-data intelligence ────────────────────────────────────────────────────
@@ -836,7 +897,7 @@ function resolveLive(query: string, ctx: LiveCtx): BotReply | null {
     if (open.length === 0) {
       return {
         text: "There are no open vacancies at the moment — but new roles are published regularly, so please check back soon. I can also tell you about internships and training opportunities.",
-        followUps: ["Does CAA offer internships or industrial training?", "Why work at CAA? What are the benefits?"],
+        followUps: ["Does UCAA offer internships or industrial training?", "Why work at UCAA? What are the benefits?"],
         outcome: "answered", matched: "[live] open vacancies",
       };
     }
@@ -862,10 +923,18 @@ function resolveLive(query: string, ctx: LiveCtx): BotReply | null {
 function resolve(query: string, starterTopics: string[], lastEntry: FaqEntry | null, persona: Persona, live?: LiveCtx): BotReply {
   const q = query.toLowerCase().trim();
 
-  // Small talk first — keeps Martha feeling human
-  for (const rule of SMALL_TALK) {
-    if (rule.test.test(q)) {
-      return { text: pick(rule.replies), followUps: rule.starters ? starterTopics : rule.followUps, outcome: "smalltalk" };
+  // Small talk first — keeps Martha feeling human. Restricted to short,
+  // self-contained messages: a bare \b match on a common word like "help"
+  // previously fired on any sentence containing it anywhere — "can you help
+  // me plan my wedding" was read as "what can you do?" instead of falling
+  // through to a fallback. Genuine small talk is always short, so anything
+  // longer skips straight to real matching below.
+  const wordCount = q.split(/\s+/).filter(Boolean).length;
+  if (wordCount <= 6) {
+    for (const rule of SMALL_TALK) {
+      if (rule.test.test(q)) {
+        return { text: pick(rule.replies), followUps: rule.starters ? starterTopics : rule.followUps, outcome: "smalltalk" };
+      }
     }
   }
 
@@ -885,13 +954,13 @@ function resolve(query: string, starterTopics: string[], lastEntry: FaqEntry | n
   const contextBoost = lastEntry?.followUps ? new Set(lastEntry.followUps) : null;
 
   const ranked = FAQS
-    .map((faq) => ({ faq, score: scoreEntry(faq, qNorm, qWords, contextBoost, persona) }))
+    .map((faq) => ({ faq, ...scoreEntry(faq, qNorm, qWords, contextBoost, persona) }))
     .filter((r) => r.score > 0)
     .sort((a, b) => b.score - a.score);
 
-  if (ranked.length > 0 && ranked[0].score >= STRONG_MATCH) {
+  if (ranked.length > 0 && ranked[0].score >= STRONG_MATCH && ranked[0].keywordScore >= MIN_KEYWORD_SCORE) {
     const best = ranked[0].faq;
-    return { text: best.answer, followUps: best.followUps, outcome: "answered", matched: best.question, entry: best };
+    return { text: best.answer, followUps: best.followUps, outcome: "answered", matched: best.question, entry: best, confidence: ranked[0].keywordScore };
   }
 
   if (ranked.length > 0) {
@@ -902,6 +971,7 @@ function resolve(query: string, starterTopics: string[], lastEntry: FaqEntry | n
       followUps: candidates,
       outcome: "suggested",
       matched: candidates[0],
+      confidence: ranked[0].keywordScore,
     };
   }
 
@@ -922,7 +992,7 @@ function resolve(query: string, starterTopics: string[], lastEntry: FaqEntry | n
 
 type Message = { from: "bot" | "user"; text: string; followUps?: string[] };
 
-// CAA's hierarchical roles (auditor, hr_officer, it_admin, dhra, hod) aren't
+// UCAA's hierarchical roles (auditor, hr_officer, it_admin, dhra, hod) aren't
 // their own Persona/ROLE_TOPICS bucket — there are only 3 admin content
 // buckets (recruiter/hr/super) and adding 5 more would just fork the same
 // FAQ answers. Each maps onto whichever bucket its day-to-day work and
@@ -946,6 +1016,24 @@ function personaOf(auth: ReturnType<typeof useApp>["auth"]): Persona {
   return "external";
 }
 
+// A plain page reload (not in-app navigation, which doesn't remount this
+// component) previously discarded the whole conversation with no warning.
+// sessionStorage keeps it for the life of the browser tab — gone once the
+// tab closes, same as the rest of the session, but a refresh no longer loses
+// whatever was mid-conversation.
+const CHAT_STORAGE_KEY = "caa_martha_chat_v1";
+
+function loadStoredMessages(): Message[] | null {
+  try {
+    const raw = sessionStorage.getItem(CHAT_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 export function FaqChatbot() {
   const { auth, jobs, applications } = useApp();
   const persona = personaOf(auth);
@@ -953,14 +1041,23 @@ export function FaqChatbot() {
   const firstName = auth.isLoggedIn ? auth.firstName : "";
 
   const [open, setOpen] = useState(false);
+  // Same focus-trap/Escape-to-close/return-focus pattern already used by the
+  // app's other overlays (e.g. the candidate profile modal) — previously
+  // this widget, present on every page of the site, had none of it.
+  const dialogRef = useModalA11y<HTMLDivElement>(() => setOpen(false), open);
   const [waving, setWaving] = useState(false);
-  const [messages, setMessages] = useState<Message[]>(() => [
-    { from: "bot", text: pick(WELCOMES)(firstName), followUps: topics },
-  ]);
+  const conversationStarted = useRef(false);
+  const [messages, setMessages] = useState<Message[]>(() => {
+    const stored = loadStoredMessages();
+    if (stored) {
+      conversationStarted.current = true;
+      return stored;
+    }
+    return [{ from: "bot", text: pick(WELCOMES)(firstName), followUps: topics }];
+  });
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
-  const conversationStarted = useRef(false);
   // Conversation context: the last FAQ Martha answered, used to bias matching
   // toward related topics and to bridge vague follow-ups ("how long does that take?").
   const lastEntryRef = useRef<FaqEntry | null>(null);
@@ -972,6 +1069,10 @@ export function FaqChatbot() {
       setMessages([{ from: "bot", text: pick(WELCOMES)(firstName), followUps: ROLE_TOPICS[persona] }]);
     }
   }, [persona, firstName]);
+
+  useEffect(() => {
+    try { sessionStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(messages)); } catch {}
+  }, [messages]);
 
   useEffect(() => {
     if (listRef.current) {
@@ -1009,6 +1110,7 @@ export function FaqChatbot() {
           matchedQuestion: reply.matched,
           outcome: reply.outcome as "answered" | "suggested" | "fallback",
           persona,
+          confidence: reply.confidence,
         });
       }
     }, delay);
@@ -1024,8 +1126,11 @@ export function FaqChatbot() {
     <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-3">
       {/* Chat window */}
       {open && (
-        <div className="w-[340px] max-w-[calc(100vw-40px)] bg-white rounded-2xl shadow-2xl border border-caa-border flex flex-col overflow-hidden"
-          style={{ height: "480px" }}>
+        <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Chat with Martha, the UCAA virtual assistant"
+          // A fixed 480px box left little more than half a phone screen usable —
+          // narrow viewports get a near-full-height sheet instead; sm: and up
+          // keep the original compact floating window.
+          className="w-[340px] max-w-[calc(100vw-40px)] h-[calc(100vh-100px)] sm:h-[480px] bg-white rounded-2xl shadow-2xl border border-caa-border flex flex-col overflow-hidden">
           {/* Header */}
           <div className="bg-caa-navy px-4 py-3 flex items-center justify-between">
             <div className="flex items-center gap-2.5">
@@ -1036,7 +1141,7 @@ export function FaqChatbot() {
                 <p className="text-white text-sm font-semibold leading-tight">Martha</p>
                 <p className="text-white/60 text-[11px] flex items-center gap-1.5">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 inline-block" />
-                  CAA Virtual Assistant
+                  UCAA Virtual Assistant
                 </p>
               </div>
             </div>
@@ -1046,8 +1151,10 @@ export function FaqChatbot() {
             </button>
           </div>
 
-          {/* Messages */}
-          <div ref={listRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-3 bg-slate-50">
+          {/* Messages — role="log" + aria-live announces each new reply to
+              screen readers, which previously had no way to know Martha had
+              said anything without manually re-reading the panel. */}
+          <div ref={listRef} role="log" aria-live="polite" aria-relevant="additions" className="flex-1 overflow-y-auto px-4 py-3 space-y-3 bg-slate-50">
             {messages.map((m, i) => (
               <div key={i} className="space-y-2">
                 <div className={`flex items-end gap-1.5 ${m.from === "user" ? "justify-end" : "justify-start"}`}>
@@ -1114,7 +1221,7 @@ export function FaqChatbot() {
       {/* Toggle button */}
       <button
         onClick={() => (open ? setOpen(false) : openChat())}
-        aria-label={open ? "Close assistant" : "Chat with Martha, the CAA assistant"}
+        aria-label={open ? "Close assistant" : "Chat with Martha, the UCAA assistant"}
         className="h-14 w-14 rounded-full bg-caa-navy text-white shadow-xl hover:bg-caa-navy-2 hover:scale-105 transition-all relative"
       >
         {open ? (

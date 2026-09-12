@@ -3,15 +3,15 @@ import {
   auth as authApi, jobs as jobsApi, applications as appsApi,
   notifications as notifApi, settings as settingsApi,
   cv as cvApi, criteria as criteriaApi, departments as departmentsApi, permissions as permissionsApi,
-  jobTemplates as jobTemplatesApi,
+  jobTemplates as jobTemplatesApi, analyticsApi,
   setToken, restoreSession, setSessionExpiredHandler,
-  type UserResponse, type Department,
+  type UserResponse, type Department, type AssessmentKind,
 } from "@/services/api/client";
 
 // ─── Base types ───────────────────────────────────────────────────────────────
 
 export type Visibility = "external" | "internal";
-export type QualLevel = "O-Level" | "A-Level" | "Certificate" | "Diploma" | "Degree" | "Masters" | "PhD";
+export type QualLevel = "O-Level" | "A-Level" | "Certificate" | "Diploma" | "Degree" | "Postgraduate" | "Masters" | "PhD";
 export type ApplicationStatus =
   | "Pending" | "Under Review" | "Shortlisted" | "Shortlisted II" | "Interview"
   | "Assessment Scheduled" | "Assessment Complete"
@@ -42,7 +42,11 @@ export type AdminSettings = {
   emailSenderName: string;
   closingSoonDays: number;
   maxApplicationsPerCandidate: number;
-  notifTemplates: { shortlist: string; decline: string; interview: string; offer: string };
+  notifTemplates: {
+    shortlist: string; decline: string; interview: string; offer: string;
+    assessmentScheduled: string; panelInvite: string;
+  };
+  defaultCgpaThreshold: number;
 };
 
 // ─── New feature types ────────────────────────────────────────────────────────
@@ -126,12 +130,13 @@ export type JobCriteria = {
   minExperienceYears?: number;
   requiredQualLevel?: QualLevel;
   disqualifyingUniversities?: string[];
-  assessmentTypes?: AssessmentType[];
+  // Assessment 1 is compulsory for every job; Assessment 2 is optional and
+  // only asked of candidates when the officer creating the job enables it.
+  // Stored under the same `assessmentTypes` wire field the backend already
+  // persists opaquely (was an unordered, unused set of legacy labels before).
+  assessmentTypes?: { assessment1: AssessmentKind; assessment2?: AssessmentKind };
   requirements?: JobRequirement[];
 };
-
-export const ASSESSMENT_TYPES = ["Written", "Oral Interview", "Practical Test"] as const;
-export type AssessmentType = typeof ASSESSMENT_TYPES[number];
 
 export type PermissionOverride = {
   email: string;
@@ -259,6 +264,18 @@ const NON_WITHDRAWABLE_STATUSES: ApplicationStatus[] = [
 ];
 export function canWithdraw(status: ApplicationStatus): boolean {
   return !NON_WITHDRAWABLE_STATUSES.includes(status);
+}
+
+// Same list as NON_WITHDRAWABLE_STATUSES today, but kept as its own named
+// export — editing and withdrawing are different concerns that only happen
+// to share a threshold right now. Mirrors EDIT_LOCKED_STATUSES in the
+// backend's ApplicationService.java.
+const EDIT_LOCKED_STATUSES: ApplicationStatus[] = [
+  "Shortlisted", "Shortlisted II", "Interview", "Assessment Scheduled",
+  "Assessment Complete", "Offered",
+];
+export function canEditApplication(status: ApplicationStatus): boolean {
+  return !EDIT_LOCKED_STATUSES.includes(status);
 }
 
 /** Evaluate one screening-question answer precisely. Pass = stays eligible. Legacy
@@ -449,7 +466,7 @@ type Ctx = {
   /** Log many emails in one state update + one localStorage write — use instead of logEmail in a loop. */
   bulkLogEmails: (emails: Omit<SentEmail, "id" | "sentAt">[]) => void;
   clearEmailLog: () => void;
-  analyticsEvents: AnalyticsEvent[];
+  /** Records a real visitor-activity event to the backend (Site Analytics tab reads it back). Fire-and-forget. */
   trackEvent: (e: Omit<AnalyticsEvent, "ts">) => void;
 };
 
@@ -494,14 +511,14 @@ const JOBS: Job[] = [
   { id: 4, abbr: "FIN", title: "Finance Officer (Revenue Assurance)", dept: "Finance & Admin", deptKey: "finance", location: "Kampala HQ", salary: "UGX 2.8M–3.6M", salaryBand: "UG5", type: "Contract", closes: "Jun 30, 2026", closesAt: "2026-06-30", visibility: "external", minAge: 25, requiredExperience: 4, requiredQualification: "Degree" },
   { id: 5, abbr: "LEG", title: "Legal Counsel (Aviation Regulations)", dept: "Legal", deptKey: "legal", location: "Kampala HQ", salary: "UGX 3.2M–4.4M", salaryBand: "UG4", type: "Full-time", closes: "Jul 10, 2026", closesAt: "2026-07-10", visibility: "external", minAge: 27, requiredExperience: 5, requiredQualification: "Masters" },
   { id: 6, abbr: "ATT", title: "ATC Trainee (Graduate Entry)", dept: "Air Traffic Mgmt", deptKey: "atm", location: "Entebbe Airport", salary: "UGX 1.8M–2.4M", salaryBand: "UG7", type: "Full-time", closes: "Jul 15, 2026", closesAt: "2026-07-15", visibility: "external", minAge: 21, requiredExperience: 0, requiredQualification: "Degree" },
-  { id: 7, abbr: "INT", title: "Internal — Manager, Aerodrome Operations", dept: "Operations", deptKey: "ops", location: "Entebbe Airport", salary: "UGX 5.5M–7.0M", salaryBand: "UG2", type: "Full-time", closes: "Jun 25, 2026", closesAt: "2026-06-25", visibility: "internal", minAge: 30, requiredExperience: 8, requiredQualification: "Masters", description: "Open to verified CAA staff only." },
+  { id: 7, abbr: "INT", title: "Internal — Manager, Aerodrome Operations", dept: "Operations", deptKey: "ops", location: "Entebbe Airport", salary: "UGX 5.5M–7.0M", salaryBand: "UG2", type: "Full-time", closes: "Jun 25, 2026", closesAt: "2026-06-25", visibility: "internal", minAge: 30, requiredExperience: 8, requiredQualification: "Masters", description: "Open to verified UCAA staff only." },
   { id: 8,  abbr: "ACO", title: "Approach Control Officer", dept: "Air Traffic Mgmt", deptKey: "atm", location: "Entebbe Airport", salary: "UGX 3.5M–4.8M", salaryBand: "UG4", type: "Full-time", closes: "Jul 20, 2026", closesAt: "2026-07-20", visibility: "external", minAge: 24, requiredExperience: 3, requiredQualification: "Degree", featured: true },
   { id: 9,  abbr: "FOI", title: "Flight Operations Inspector", dept: "Aviation Safety", deptKey: "safety", location: "Kampala HQ", salary: "UGX 3.2M–4.5M", salaryBand: "UG4", type: "Full-time", closes: "Jul 5, 2026", closesAt: "2026-07-05", visibility: "external", minAge: 28, requiredExperience: 6, requiredQualification: "Degree" },
   { id: 10, abbr: "DGI", title: "Dangerous Goods Inspector", dept: "Aviation Safety", deptKey: "safety", location: "Entebbe Airport", salary: "UGX 2.8M–3.8M", salaryBand: "UG5", type: "Full-time", closes: "Jul 8, 2026", closesAt: "2026-07-08", visibility: "external", minAge: 25, requiredExperience: 4, requiredQualification: "Degree" },
   { id: 11, abbr: "ASec", title: "Aviation Security Inspector", dept: "Aviation Safety", deptKey: "safety", location: "Entebbe Airport", salary: "UGX 2.9M–3.9M", salaryBand: "UG5", type: "Full-time", closes: "Jul 12, 2026", closesAt: "2026-07-12", visibility: "external", minAge: 25, requiredExperience: 4, requiredQualification: "Degree" },
   { id: 12, abbr: "PRO", title: "Procurement Officer", dept: "Finance & Admin", deptKey: "finance", location: "Kampala HQ", salary: "UGX 2.4M–3.2M", salaryBand: "UG6", type: "Contract", closes: "Jul 3, 2026", closesAt: "2026-07-03", visibility: "external", minAge: 23, requiredExperience: 2, requiredQualification: "Degree" },
   { id: 13, abbr: "NET", title: "Network Engineer", dept: "ICT & Systems", deptKey: "ict", location: "Kampala HQ", salary: "UGX 2.8M–3.7M", salaryBand: "UG5", type: "Full-time", closes: "Jul 18, 2026", closesAt: "2026-07-18", visibility: "external", minAge: 24, requiredExperience: 3, requiredQualification: "Degree" },
-  { id: 14, abbr: "AIS", title: "Internal — Principal, Aeronautical Information Services", dept: "Operations", deptKey: "ops", location: "Entebbe Airport", salary: "UGX 4.5M–6.0M", salaryBand: "UG3", type: "Full-time", closes: "Jul 22, 2026", closesAt: "2026-07-22", visibility: "internal", minAge: 28, requiredExperience: 6, requiredQualification: "Degree", description: "Open to verified CAA staff only." },
+  { id: 14, abbr: "AIS", title: "Internal — Principal, Aeronautical Information Services", dept: "Operations", deptKey: "ops", location: "Entebbe Airport", salary: "UGX 4.5M–6.0M", salaryBand: "UG3", type: "Full-time", closes: "Jul 22, 2026", closesAt: "2026-07-22", visibility: "internal", minAge: 28, requiredExperience: 6, requiredQualification: "Degree", description: "Open to verified UCAA staff only." },
 ];
 
 // ─── Seed application generator (~900 realistic Ugandan applicants) ───────────
@@ -628,62 +645,18 @@ const DEFAULT_SETTINGS: AdminSettings = {
   emailSenderName: "CAA HR Team",
   closingSoonDays: 7,
   maxApplicationsPerCandidate: 5,
+  defaultCgpaThreshold: 3.8,
   notifTemplates: {
     shortlist: "Dear {name}, we are pleased to inform you that your application for {role} has been shortlisted. Our team will contact you with further instructions shortly.",
     decline: "Dear {name}, thank you for applying for {role}. After careful review, we regret to inform you that your application has not been successful at this stage.",
     interview: "Dear {name}, congratulations! Your application for {role} has progressed to the interview stage. Our HR team will contact you to confirm the date and time.",
     offer: "Dear {name}, we are delighted to offer you the position of {role}. Please review the attached offer letter and respond within five (5) working days.",
+    assessmentScheduled: "Dear {name},\n\nYour {type} assessment for the position of {role} at the Uganda Civil Aviation Authority has been scheduled for {when}.{venueLine}\n\nPlease log in to the UCAA e-Recruitment Portal for further details, and come prepared as instructed.\n\nYours sincerely,\nHuman Resources Department\nUganda Civil Aviation Authority",
+    panelInvite: "Dear {name},\n\nYou have been selected by {invitedBy} to serve on the interview panel for the position of {role} at the Uganda Civil Aviation Authority.\n\nPlease log in to the HR Console for panel scheduling details, or contact Human Resources for more information.\n\nThank you for your service to the selection process.\n\nYours sincerely,\nHuman Resources Department\nUganda Civil Aviation Authority",
   },
 };
 
 // ─── Storage keys ─────────────────────────────────────────────────────────────
-
-function generateAnalyticsSeed(): AnalyticsEvent[] {
-  const now = Date.now();
-  const DAY = 86_400_000;
-  const events: AnalyticsEvent[] = [];
-  let s = 77391;
-  const rng = () => { s = lcg(s); return s / 0x100000000; };
-
-  const jobPool = [
-    { id: 1, title: "Senior Air Traffic Controller" },
-    { id: 8, title: "Approach Control Officer" },
-    { id: 2, title: "Principal Safety Inspector (Airworthiness)" },
-    { id: 3, title: "Systems Administrator" },
-    { id: 4, title: "Finance Officer (Revenue Assurance)" },
-    { id: 6, title: "ATC Trainee (Graduate Entry)" },
-  ];
-  const searchPool = ["air traffic", "safety", "ICT jobs", "finance", "entebbe", "procurement", "network", "ATC trainee"];
-
-  for (let d = 29; d >= 0; d--) {
-    const dayBase = now - d * DAY;
-    const pvCount = 18 + Math.round(rng() * 20);
-    for (let i = 0; i < pvCount; i++) events.push({ type: "page_view", ts: dayBase + Math.round(rng() * (DAY - 1)) });
-
-    const jvCount = 10 + Math.round(rng() * 16);
-    for (let i = 0; i < jvCount; i++) {
-      const j = jobPool[Math.floor(rng() * jobPool.length)];
-      events.push({ type: "job_view", jobId: j.id, jobTitle: j.title, ts: dayBase + Math.round(rng() * (DAY - 1)) });
-    }
-
-    const acCount = 2 + Math.round(rng() * 5);
-    for (let i = 0; i < acCount; i++) {
-      const j = jobPool[Math.floor(rng() * jobPool.length)];
-      events.push({ type: "apply_click", jobId: j.id, jobTitle: j.title, ts: dayBase + Math.round(rng() * (DAY - 1)) });
-    }
-
-    const sCount = 1 + Math.round(rng() * 3);
-    for (let i = 0; i < sCount; i++) {
-      events.push({ type: "search", query: searchPool[Math.floor(rng() * searchPool.length)], ts: dayBase + Math.round(rng() * (DAY - 1)) });
-    }
-
-    if (rng() > 0.4) {
-      const j = jobPool[Math.floor(rng() * jobPool.length)];
-      events.push({ type: "save_job", jobId: j.id, jobTitle: j.title, ts: dayBase + Math.round(rng() * (DAY - 1)) });
-    }
-  }
-  return events;
-}
 
 const STORAGE_KEY    = "caa_auth_v1";
 const CV_KEY         = "caa_cv_v1";
@@ -696,7 +669,6 @@ const NOTIF_KEY      = "caa_notif_v1";
 const CRITERIA_KEY   = "caa_criteria_v1";
 const PERMS_KEY      = "caa_perms_v1";
 const EMAILS_KEY     = "caa_emails_v1";
-const ANALYTICS_KEY  = "caa_analytics_v1";
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
 
@@ -725,7 +697,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [jobTemplates, setJobTemplates] = useState<JobTemplate[]>([]);
   const [permissionOverrides, setPermissionOverrides] = useState<PermissionOverride[]>([]);
   const [sentEmails, setSentEmails] = useState<SentEmail[]>([]);
-  const [analyticsEvents, setAnalyticsEvents] = useState<AnalyticsEvent[]>(generateAnalyticsSeed);
 
   useEffect(() => {
     try {
@@ -780,8 +751,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (rp) setPermissionOverrides(JSON.parse(rp));
       const rem = localStorage.getItem(EMAILS_KEY);
       if (rem) setSentEmails(JSON.parse(rem));
-      const ran = localStorage.getItem(ANALYTICS_KEY);
-      if (ran) setAnalyticsEvents((seed) => [...seed, ...JSON.parse(ran)]);
     } catch {}
 
     // Load live vacancies + portal settings from the backend for every visitor,
@@ -988,9 +957,49 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const addApplication: Ctx["addApplication"] = (a) => {
+    const email = a.candidateEmail?.toLowerCase();
+    // Editing an existing application (candidate re-opened Apply for a job
+    // they already applied to) previously always went through the "create
+    // new" path below — the backend's duplicate() check then silently
+    // rejected it (any status blocked resubmission), and the swallowed
+    // .catch(() => {}) let a false "success" toast through while nothing
+    // actually changed. Now: find the existing row and update it in place,
+    // matching the real update-vs-create branch the backend takes.
+    const existing = email ? applications.find((x) => x.candidateEmail?.toLowerCase() === email && x.jobId === a.jobId) : undefined;
+
+    if (existing) {
+      if (!canEditApplication(existing.status)) {
+        pushToast({ type: "warning", title: "This application can no longer be edited", message: `It has already progressed to ${existing.status}. Contact HR if you need to make a change.` });
+        return existing;
+      }
+      const updated: Application = { ...existing, ...a, id: existing.id, date: existing.date, status: existing.status };
+      persistApps(applications.map((x) => (x.id === existing.id ? updated : x)));
+      if (a.jobId != null) {
+        appsApi.submit({
+          jobId: a.jobId,
+          completion: a.completion,
+          cgpa: (a as unknown as Record<string, unknown>).cgpa as number | undefined,
+          university: (a as unknown as Record<string, unknown>).university as string | undefined,
+          screeningAnswers: a.screeningAnswers as Record<string, string> | undefined,
+        }).then((res) => {
+          if (res.success && res.data) {
+            setApplications((prev) => {
+              const next = prev.map((x) => (x.id === existing.id ? { ...x, status: res.data.status as ApplicationStatus } : x));
+              try { localStorage.setItem(APPS_KEY, JSON.stringify(next)); } catch {}
+              return next;
+            });
+          } else {
+            pushToast({ type: "warning", title: "Changes not saved to server", message: "Please check your connection and try again." });
+          }
+        }).catch((err) => {
+          pushToast({ type: "warning", title: "Changes not saved to server", message: err instanceof Error ? err.message : "Please check your connection and try again." });
+        });
+      }
+      return updated;
+    }
+
     const cap = settings.maxApplicationsPerCandidate;
-    if (cap > 0 && a.candidateEmail) {
-      const email = a.candidateEmail.toLowerCase();
+    if (cap > 0 && email) {
       const active = applications.filter(
         (x) => x.candidateEmail?.toLowerCase() === email && x.status !== "Declined"
       ).length;
@@ -1042,7 +1051,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return next;
     });
     // Persist to database so changes are visible to the candidate on next load
-    appsApi.updateStatus(appId, status, notifyEmail, notifyMessage).catch(() => {});
+    appsApi.updateStatus(appId, status, notifyEmail, notifyMessage).catch((err) => {
+      pushToast({ type: "warning", title: "Status change not saved to server", message: err instanceof Error ? err.message : "Please check your connection and try again." });
+    });
     if (notifyEmail && notifyMessage) {
       const type: Notification["type"] =
         status === "Shortlisted" ? "shortlisted" :
@@ -1062,7 +1073,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return next;
     });
     // Persist all status changes to database in one call
-    appsApi.bulkStatus(updates.map((u) => ({ id: u.id, status: u.status }))).catch(() => {});
+    appsApi.bulkStatus(updates.map((u) => ({ id: u.id, status: u.status }))).catch((err) => {
+      pushToast({ type: "warning", title: "Status changes not saved to server", message: err instanceof Error ? err.message : "Please check your connection and try again." });
+    });
   };
 
   // These previously only ever touched local state/localStorage and never
@@ -1201,6 +1214,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const next = { ...settings, ...p };
     setSettings(next);
     try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(next)); } catch {}
+    // Previously local-only (localStorage/context only) — the backend settings
+    // row never changed, so every "Save" in the Settings tab was a no-op that
+    // silently reverted on the next real page load or re-seed.
+    settingsApi.update(next).then((r) => {
+      if (r.success) {
+        setSettings(r.data as unknown as AdminSettings);
+        try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(r.data)); } catch {}
+      } else {
+        pushToast({ type: "warning", title: "Settings not saved to server", message: "Please check your connection and try again." });
+      }
+    }).catch((err) => {
+      pushToast({ type: "warning", title: "Settings not saved to server", message: err instanceof Error ? err.message : "Please check your connection and try again." });
+    });
   };
 
   const sendNotification: Ctx["sendNotification"] = (recipientEmail, title, message, type) => {
@@ -1303,13 +1329,37 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const trackEvent: Ctx["trackEvent"] = (e) => {
-    const entry: AnalyticsEvent = { ...e, ts: Date.now() };
-    setAnalyticsEvents((prev) => {
-      const next = [...prev, entry];
-      try { localStorage.setItem(ANALYTICS_KEY, JSON.stringify(next.filter(ev => ev.ts > Date.now() - 30 * 86_400_000))); } catch {}
-      return next;
-    });
+    analyticsApi.track(e.type, e.jobId, e.jobTitle, e.query);
   };
+
+  // Settings → "Auto-logout after inactivity" was previously saved and
+  // displayed but never enforced anywhere. Track real user activity and sign
+  // out once the configured number of minutes passes with none.
+  const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!auth.isLoggedIn) return;
+    const limitMs = Math.max(1, settings.sessionTimeoutMinutes) * 60_000;
+
+    const onTimeout = () => {
+      signOut();
+      pushToast({ type: "info", title: "Signed out", message: `You were signed out after ${settings.sessionTimeoutMinutes} minutes of inactivity.` });
+    };
+    const reset = () => {
+      if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
+      inactivityTimer.current = setTimeout(onTimeout, limitMs);
+    };
+
+    const activityEvents = ["mousemove", "mousedown", "keydown", "scroll", "touchstart"] as const;
+    activityEvents.forEach((ev) => window.addEventListener(ev, reset, { passive: true }));
+    reset();
+
+    return () => {
+      activityEvents.forEach((ev) => window.removeEventListener(ev, reset));
+      if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
+      inactivityTimer.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auth.isLoggedIn, settings.sessionTimeoutMinutes]);
 
   return (
     <AppCtx.Provider
@@ -1329,7 +1379,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         jobTemplates, loadJobTemplates, saveJobTemplate, deleteJobTemplate,
         permissionOverrides, savePermissionOverride,
         sentEmails, logEmail, bulkLogEmails, clearEmailLog,
-        analyticsEvents, trackEvent,
+        trackEvent,
       }}
     >
       {children}

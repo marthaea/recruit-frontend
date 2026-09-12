@@ -25,7 +25,7 @@ export function AdminLogin({ onLogin }: { onLogin: (email: string, pw: string) =
             <ShieldCheck className="h-6 w-6 text-white" />
           </span>
           <div className="leading-tight">
-            <p className="text-[10px] tracking-[0.18em] uppercase text-white/60">Uganda CAA</p>
+            <p className="text-[10px] tracking-[0.18em] uppercase text-white/60">UCAA</p>
             <p className="text-sm font-bold text-white">HR Console</p>
           </div>
         </div>

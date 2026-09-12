@@ -1,7 +1,8 @@
 import { useState, useMemo, useEffect } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import {
   AlertCircle, FileText, Download, ClipboardList, ChevronRight, FileDown, RefreshCw, CheckCircle2, XCircle, Eye, FileSearch, ExternalLink,
-  LayoutGrid, List, CheckSquare, Square, Archive,
+  LayoutGrid, List, CheckSquare, Square, Archive, CalendarClock,
 } from "lucide-react";
 import {
   useApp, canAccess, type Job, type Application, type ApplicationStatus, type JobCriteria,
@@ -10,10 +11,18 @@ import {
   downloadScreeningReport, downloadOfferLetter, downloadCandidateCv, downloadCandidateCvsZip, type ScreeningReportEntry,
 } from "@/services/documents/pdf-reports";
 import { applications as appsApi } from "@/services/api/client";
-import { buildEmail, autoQualify, STATUS_COLORS, fi, EmptyState, type ScreeningResult } from "./shared";
+import { buildEmail, autoQualify, logScreeningRun, STATUS_COLORS, fi, EmptyState, type ScreeningResult } from "./shared";
+import { AssessmentInviteModal, type InviteCandidate } from "./AssessmentInviteModal";
 
-export function AppsTab({ jobs, applications, jobId, cvStore, updateStatus, bulkUpdateStatus, logAction, actor, criteria, role, perms, logEmail, bulkLogEmails, initialStatusFilter, onSelectJob, onClearJob }: any) {
+// mode "list" (Applications tab) is a plain per-vacancy listing — no
+// auto-screening controls. mode "shortlist" (Shortlisting tab) keeps the
+// full screening workflow. Previously both tabs rendered this same
+// component with no distinction at all, so the screening UI showed
+// identically on both (and on Interview Panel too, until that becomes its
+// own feature).
+export function AppsTab({ jobs, applications, jobId, cvStore, updateStatus, bulkUpdateStatus, logAction, actor, criteria, role, perms, logEmail, bulkLogEmails, initialStatusFilter, onSelectJob, onClearJob, mode = "shortlist" }: any) {
   const { pushToast, loadCvsForEmails } = useApp();
+  const navigate = useNavigate();
   const [viewingAll, setViewingAll] = useState(false);
   const filtered = jobId ? applications.filter((a: Application) => a.jobId === jobId) : applications;
   const job = jobs.find((j: Job) => j.id === jobId);
@@ -21,6 +30,10 @@ export function AppsTab({ jobs, applications, jobId, cvStore, updateStatus, bulk
   const [statusFilter, setStatusFilter] = useState(initialStatusFilter ?? "all");
   const [screeningResult, setScreeningResult] = useState<{ results: ScreeningResult[]; confirmed: boolean } | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  // Post-Shortlist-1 decision: send the just-shortlisted group on to
+  // Shortlisted II's panel scoring, or skip straight to inviting them for
+  // an assessment. `inviteCandidates` non-null opens the shared modal.
+  const [inviteCandidates, setInviteCandidates] = useState<InviteCandidate[] | null>(null);
   const [view, setView] = useState<"table" | "board">("table");
   const [dragOverCol, setDragOverCol] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -170,9 +183,42 @@ export function AppsTab({ jobs, applications, jobId, cvStore, updateStatus, bulk
         }),
       ]);
       logAction(`Auto-screening: shortlisted ${passed.length}, declined ${failed.length}`);
+      logScreeningRun({
+        action: "Ran shortlisting auto-screen",
+        jobId: jobId ?? undefined,
+        jobTitle: job?.title,
+        candidates: screeningResult.results.map((r) => ({
+          id: r.app.id, name: r.app.candidateName, email: r.app.candidateEmail,
+          jobId: r.app.jobId, jobTitle: r.app.title,
+          decision: r.ok ? "Shortlisted" : "Declined",
+          reasons: r.checks.map((c) => `${c.label}: ${c.pass ? "meets" : "does not meet"} requirement — ${c.detail}`),
+        })),
+      });
       setScreeningResult((prev) => prev ? { ...prev, confirmed: true } : null);
       setIsProcessing(false);
     }, 0);
+  };
+
+  // The two post-Shortlist-1 paths. Both operate on the just-passed group
+  // from the most recent screening run, not on whatever the status filter
+  // currently shows — a candidate who was already Shortlisted from an
+  // earlier run isn't accidentally swept up.
+  const justShortlisted = () => (screeningResult?.results ?? []).filter((r) => r.ok).map((r) => r.app);
+
+  const sendToShortlistingII = () => {
+    const group = justShortlisted();
+    if (group.length === 0) return;
+    bulkUpdateStatus(group.map((a) => ({ id: a.id, status: "Shortlisted II" as const })));
+    logAction(`Sent ${group.length} candidate(s) to Shortlisted II`, job?.title);
+    pushToast({ type: "success", title: `${group.length} candidate${group.length !== 1 ? "s" : ""} sent to Shortlisted II` });
+    setScreeningResult(null);
+    if (jobId != null) navigate({ to: "/admin", search: { tab: "shortlisting-ii", jobId } });
+  };
+
+  const openAssessmentInvite = () => {
+    const group = justShortlisted();
+    if (group.length === 0) return;
+    setInviteCandidates(group.map((a) => ({ applicationId: a.id, candidateName: a.candidateName ?? undefined, candidateEmail: a.candidateEmail ?? undefined })));
   };
 
   const exportScreeningReport = () => {
@@ -289,7 +335,7 @@ export function AppsTab({ jobs, applications, jobId, cvStore, updateStatus, bulk
               {downloadingCvs ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />} {downloadingCvs ? "Zipping…" : `Download ${selectedIds.size} selected CV${selectedIds.size !== 1 ? "s" : ""}`}
             </button>
           )}
-          {canAccess(role, "canShortlist", perms) && (
+          {mode === "shortlist" && canAccess(role, "canShortlist", perms) && (
             eligible.length > 0 ? (
               <button
                 onClick={runScreening}
@@ -371,22 +417,46 @@ export function AppsTab({ jobs, applications, jobId, cvStore, updateStatus, bulk
         </div>
       )}
 
-      {screeningResult?.confirmed && (
-        <div className="rounded-lg border border-caa-success/30 bg-caa-success/5 p-3 flex items-start gap-2">
-          <CheckCircle2 className="h-4 w-4 text-caa-success shrink-0 mt-0.5" />
-          <div className="flex-1">
-            <p className="text-sm font-semibold text-caa-success">Screening applied — {screeningResult.results.filter((r) => r.ok).length} shortlisted, {screeningResult.results.filter((r) => !r.ok).length} declined.</p>
-            <p className="text-xs text-caa-success/80 mt-0.5">Next step: review the shortlist below or export the PDF, then use <strong>Approve All for Interview</strong> to advance candidates to the interview stage.</p>
+      {screeningResult?.confirmed && (() => {
+        const passedCount = screeningResult.results.filter((r) => r.ok).length;
+        const declinedCount = screeningResult.results.length - passedCount;
+        return (
+        <div className="rounded-lg border border-caa-success/30 bg-caa-success/5 p-3">
+          <div className="flex items-start gap-2">
+            <CheckCircle2 className="h-4 w-4 text-caa-success shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-caa-success">Screening applied — {passedCount} shortlisted, {declinedCount} declined.</p>
+              <p className="text-xs text-caa-success/80 mt-0.5">What's next for the {passedCount} shortlisted candidate{passedCount !== 1 ? "s" : ""}?</p>
+            </div>
+            <button onClick={() => setScreeningResult(null)} className="text-caa-success/60 hover:text-caa-success shrink-0"><XCircle className="h-4 w-4" /></button>
           </div>
-          <div className="flex gap-2 shrink-0">
-            <button onClick={() => { setStatusFilter("Shortlisted"); setScreeningResult(null); }} className="px-3 py-1 text-xs font-semibold bg-caa-success text-white rounded-md">View Shortlist</button>
-            <button onClick={() => setScreeningResult(null)} className="text-caa-success/60 hover:text-caa-success"><XCircle className="h-4 w-4" /></button>
+          <div className="flex gap-2 flex-wrap mt-2.5 pl-6">
+            <button onClick={sendToShortlistingII} className="px-3 py-1.5 text-xs font-semibold bg-caa-navy text-white rounded-md hover:bg-caa-navy-2 inline-flex items-center gap-1.5">
+              <ClipboardList className="h-3.5 w-3.5" /> Send to Shortlisting II
+            </button>
+            <button onClick={openAssessmentInvite} className="px-3 py-1.5 text-xs font-semibold border border-caa-navy text-caa-navy rounded-md hover:bg-caa-navy/5 inline-flex items-center gap-1.5">
+              <CalendarClock className="h-3.5 w-3.5" /> Skip — Invite to Assessment
+            </button>
+            <button onClick={() => { setStatusFilter("Shortlisted"); setScreeningResult(null); }} className="px-3 py-1.5 text-xs font-semibold bg-caa-success text-white rounded-md">View Shortlist</button>
           </div>
         </div>
+        );
+      })()}
+
+      {inviteCandidates && (
+        <AssessmentInviteModal
+          job={job}
+          criteria={criteria}
+          candidates={inviteCandidates}
+          onClose={() => setInviteCandidates(null)}
+          logAction={logAction}
+          onDone={() => { setInviteCandidates(null); setScreeningResult(null); setStatusFilter("Assessment Scheduled"); }}
+        />
       )}
 
       {/* Pending-after-screening notice */}
-      {filtered.some((a: Application) => a.status === "Pending" || a.status === "Under Review") &&
+      {mode === "shortlist" &&
+       filtered.some((a: Application) => a.status === "Pending" || a.status === "Under Review") &&
        filtered.some((a: Application) => a.status === "Shortlisted" || a.status === "Interview") && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-2.5 flex items-center gap-2">
           <AlertCircle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
@@ -445,7 +515,7 @@ export function AppsTab({ jobs, applications, jobId, cvStore, updateStatus, bulk
       })()}
 
       {/* Approve for Interview banner */}
-      {statusFilter === "Shortlisted" && displayed.length > 0 && canAccess(role, "canShortlist", perms) && (
+      {mode === "shortlist" && statusFilter === "Shortlisted" && displayed.length > 0 && canAccess(role, "canShortlist", perms) && (
         <div className="rounded-lg border border-purple-200 bg-purple-50 p-3 flex items-start gap-3">
           <ClipboardList className="h-4 w-4 text-purple-700 shrink-0 mt-0.5" />
           <div className="flex-1">

@@ -66,7 +66,7 @@ export function RegisterPage() {
         <div className="flex items-center justify-between mb-5">
           <div>
             <p className="text-xs uppercase tracking-[0.18em] text-caa-navy font-semibold">Create Account</p>
-            <h1 className="font-bold text-2xl text-caa-body mt-1">Join the CAA portal</h1>
+            <h1 className="font-bold text-2xl text-caa-body mt-1">Join the UCAA portal</h1>
           </div>
           <Link to="/login" className="text-sm text-caa-navy hover:underline">Sign in</Link>
         </div>
@@ -77,7 +77,7 @@ export function RegisterPage() {
             <div className="grid grid-cols-2 gap-2 mt-1">
               {[
                 { v: "external", icon: User, t: "General public", d: "Anyone can apply" },
-                { v: "internal", icon: Building2, t: "Internal CAA staff", d: "Verified via employee #" },
+                { v: "internal", icon: Building2, t: "Internal UCAA staff", d: "Verified via employee #" },
               ].map((o) => (
                 <button
                   type="button"
@@ -161,7 +161,7 @@ export function RegisterPage() {
 
           <label className="flex items-start gap-2 text-xs text-caa-muted">
             <input type="checkbox" className="mt-0.5" checked={f.agree} onChange={(e) => set("agree", e.target.checked)} />
-            I confirm the information provided is accurate and agree to CAA Uganda's <a href="https://caa.go.ug/" target="_blank" rel="noopener noreferrer" className="text-caa-navy underline">Terms & Privacy Policy</a>.
+            I confirm the information provided is accurate and agree to UCAA's <a href="https://caa.go.ug/" target="_blank" rel="noopener noreferrer" className="text-caa-navy underline">Terms & Privacy Policy</a>.
           </label>
 
           <button type="submit" disabled={!canSubmit} className="w-full py-2.5 bg-caa-navy text-white font-semibold rounded-md hover:bg-caa-navy-2 transition-colors disabled:opacity-50">

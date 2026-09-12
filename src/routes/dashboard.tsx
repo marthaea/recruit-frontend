@@ -4,7 +4,7 @@ import { DashboardPage } from "@/features/candidate/pages/DashboardPage";
 export const Route = createFileRoute("/dashboard")({
   head: () => ({
     meta: [
-      { title: "My Dashboard — CAA Uganda" },
+      { title: "My Dashboard — UCAA" },
       {
         name: "description",
         content: "Track your applications and complete your candidate profile.",

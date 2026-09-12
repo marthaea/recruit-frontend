@@ -17,6 +17,7 @@ export const Route = createFileRoute("/admin")({
         "assessment-schedule",
         "candidate-assessment",
         "shortlisting-ii",
+        "shortlisting-reports",
         "emails",
         "interns",
         "analytics",
@@ -30,6 +31,6 @@ export const Route = createFileRoute("/admin")({
       .optional(),
     jobId: z.coerce.number().optional(),
   }),
-  head: () => ({ meta: [{ title: "HR Console — CAA Uganda" }] }),
+  head: () => ({ meta: [{ title: "HR Console — UCAA" }] }),
   component: AdminPage,
 });

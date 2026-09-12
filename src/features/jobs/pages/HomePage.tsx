@@ -3,9 +3,8 @@ import { Link } from "@tanstack/react-router";
 import { Clock, Search, ArrowRight } from "lucide-react";
 import { JobCard } from "@/features/jobs/components/JobCard";
 import { useApp } from "@/app/providers/AppContext";
-import heroImg from "@/assets/images/hero-office.jpg";
-import heroPlaneCrane from "@/assets/images/hero-plane-crane.jpg";
-import heroPlaneBlue from "@/assets/images/hero-plane-blue.jpg";
+import heroUgandaAirlines from "@/assets/images/hero-uganda-airlines.jpg";
+import heroWelcomeUganda from "@/assets/images/hero-welcome-uganda.jpg";
 
 export function HomePage() {
   const { jobs, canSeeJob } = useApp();
@@ -26,13 +25,15 @@ export function HomePage() {
   }, [visible, q, dept, loc]);
 
   const isSearching = q !== "" || dept !== "All" || loc !== "All";
-  const shown = isSearching ? filtered : filtered.slice(0, 4);
+  // 6 fills two clean rows at the lg:grid-cols-3 breakpoint (was 4, sized for
+  // the old 2-column-only grid).
+  const shown = isSearching ? filtered : filtered.slice(0, 6);
 
   const handleSearch = () => {
     document.getElementById("featured")?.scrollIntoView({ behavior: "smooth" });
   };
 
-  const slides = [heroImg, heroPlaneCrane, heroPlaneBlue];
+  const slides = [heroUgandaAirlines, heroWelcomeUganda];
   const [slide, setSlide] = useState(0);
   useEffect(() => {
     const t = setInterval(() => setSlide((s) => (s + 1) % slides.length), 2000);
@@ -51,7 +52,7 @@ export function HomePage() {
             aria-hidden
           />
         ))}
-        <div className="relative z-10 mx-auto max-w-6xl">
+        <div className="relative z-10 mx-auto max-w-7xl">
           <div className="max-w-2xl">
             <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/40 text-white/90 text-xs backdrop-blur-sm caa-fade-up">
               <Clock className="h-3.5 w-3.5" /> Applications Open — 2026 Recruitment Cycle
@@ -93,7 +94,7 @@ export function HomePage() {
 
       {/* Floating search bar */}
       <div className="px-4 sm:px-6 -mt-20 relative z-10">
-        <div className="mx-auto max-w-5xl bg-white rounded-xl border border-caa-border shadow-[0_10px_40px_-10px_rgba(11,46,95,0.18)] p-4 md:p-5">
+        <div className="mx-auto max-w-7xl bg-white rounded-xl border border-caa-border shadow-[0_10px_40px_-10px_rgba(11,46,95,0.18)] p-4 md:p-5">
           <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto_auto] gap-3">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-caa-light" />
@@ -137,7 +138,7 @@ export function HomePage() {
 
       {/* Stats */}
       <section className="px-4 sm:px-6 mt-14">
-        <div className="mx-auto max-w-5xl bg-white rounded-xl border border-caa-border py-6 grid grid-cols-2 md:grid-cols-4 divide-y md:divide-y-0 md:divide-x divide-caa-border">
+        <div className="mx-auto max-w-7xl bg-white rounded-xl border border-caa-border py-6 grid grid-cols-2 md:grid-cols-4 divide-y md:divide-y-0 md:divide-x divide-caa-border">
           {[
             { n: String(visible.length), l: "Open Positions" },
             { n: String(new Set(visible.map((j) => j.deptKey)).size), l: "Departments Hiring" },
@@ -154,7 +155,7 @@ export function HomePage() {
 
       {/* Featured Vacancies */}
       <section id="featured" className="px-4 sm:px-6 mt-16">
-        <div className="mx-auto max-w-5xl">
+        <div className="mx-auto max-w-7xl">
           <div className="flex items-end justify-between mb-6">
             <h2 className="font-bold text-2xl text-caa-body">
               {isSearching
@@ -168,7 +169,7 @@ export function HomePage() {
               View all <ArrowRight className="h-4 w-4" />
             </Link>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {shown.map((j) => (
               <JobCard key={j.id} job={j} />
             ))}

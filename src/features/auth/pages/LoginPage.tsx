@@ -44,10 +44,10 @@ export function LoginPage() {
           <div className="relative z-10 flex flex-col h-full">
             <div className="flex items-center gap-3">
               <span className="h-12 w-12 rounded-xl bg-white flex items-center justify-center shrink-0">
-                <img src={logo} alt="CAA Uganda" className="h-10 w-auto" />
+                <img src={logo} alt="UCAA" className="h-10 w-auto" />
               </span>
               <div className="leading-tight">
-                <p className="text-[11px] tracking-[0.18em] uppercase text-white/70">Uganda CAA</p>
+                <p className="text-[11px] tracking-[0.18em] uppercase text-white/70">UCAA</p>
                 <p className="font-bold text-white">e-Recruitment Portal</p>
               </div>
             </div>
@@ -79,7 +79,7 @@ export function LoginPage() {
 
             <div className="mt-auto pt-10 flex items-center gap-2 text-xs text-white/60">
               <CheckCircle2 className="h-3.5 w-3.5 text-white/70" />
-              CAA Uganda is an equal-opportunity employer · No recruitment fees, ever.
+              UCAA is an equal-opportunity employer · No recruitment fees, ever.
             </div>
           </div>
         </div>
@@ -151,7 +151,7 @@ export function LoginPage() {
             </button>
 
             <p className="text-[11px] text-caa-muted text-center mt-1">
-              Protected by industry-standard encryption · CAA Uganda never asks for your password by phone or email.
+              Protected by industry-standard encryption · UCAA never asks for your password by phone or email.
             </p>
           </form>
 

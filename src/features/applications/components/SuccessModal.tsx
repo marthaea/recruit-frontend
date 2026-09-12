@@ -12,7 +12,7 @@ export function SuccessModal({ refNumber, jobTitle, onClose }: { refNumber: stri
         </div>
         <h2 className="font-bold text-2xl text-caa-body mt-6">Application Submitted!</h2>
         <p className="text-sm text-caa-muted mt-2">
-          Your application for <span className="text-caa-body font-medium">{jobTitle}</span> has been received by CAA Uganda. We'll notify you by email of next steps.
+          Your application for <span className="text-caa-body font-medium">{jobTitle}</span> has been received by UCAA. We'll notify you by email of next steps.
         </p>
         <div className="mt-5 inline-block bg-caa-surface border border-caa-border rounded-md px-4 py-2">
           <span className="text-xs text-caa-muted">Reference: </span>

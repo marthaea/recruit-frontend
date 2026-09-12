@@ -80,7 +80,7 @@ export function StaffTab({ actor, logAction, pushToast }: any) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <div><h1 className="font-bold text-xl text-caa-body">Internal Staff</h1><p className="text-xs text-caa-muted mt-0.5">{staffList.length} verified CAA staff</p></div>
+        <div><h1 className="font-bold text-xl text-caa-body">Internal Staff</h1><p className="text-xs text-caa-muted mt-0.5">{staffList.length} verified UCAA staff</p></div>
         <div className="flex items-center gap-2">
           <button onClick={() => setShowForm((v) => !v)} className="inline-flex items-center gap-2 px-3 py-1.5 text-sm border border-caa-navy text-caa-navy rounded-md hover:bg-caa-navy/5">
             {showForm ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />} {showForm ? "Cancel" : "Add Staff"}
