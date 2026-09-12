@@ -5,6 +5,10 @@
 [build.environment]
   NODE_VERSION = "22"
   NITRO_PRESET = "netlify"
+  # Public API hostname (no trailing /api). Do not use SERVER_IP:8082 — that port is localhost-only on the host.
+  BACKEND_API_URL = "https://api.mukasamatthew.com"
+  # Browser calls the API directly (CORS + refresh cookies on api.mukasamatthew.com). Works even if /api proxy is misconfigured.
+  VITE_API_URL = "https://api.mukasamatthew.com/api"
 
 # The /api proxy is generated into dist/_redirects during the build from
 # BACKEND_API_URL. Keeping API traffic same-origin preserves refresh cookies

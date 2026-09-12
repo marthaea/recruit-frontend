@@ -18,7 +18,7 @@ Frontend (Netlify) and backend (Docker on your server) are deployed independentl
    | Variable | Value |
    | --- | --- |
    | `BACKEND_API_URL` | `https://api.mukasamatthew.com` (no trailing `/api`) |
-   | `VITE_API_URL` | leave unset / empty |
+   | `VITE_API_URL` | `https://api.mukasamatthew.com/api` (direct API; required while `/api` proxy env is wrong) |
 
 2. **Deploy**: merge to `main` → Netlify builds automatically.
 
@@ -38,6 +38,26 @@ Frontend (Netlify) and backend (Docker on your server) are deployed independentl
    Expect `200`. In the browser, hard refresh once (`Ctrl+Shift+R`) so old demo `localStorage` keys are cleared. Log in with backend demo accounts to confirm dashboards (passwords in backend README only).
 
 4. **Smoke pages**: `/`, `/vacancies`, `/login`, `/dashboard` (candidate), `/admin` (HR).
+
+### Troubleshooting: `/api/*` returns HTTP 500 on Netlify
+
+Symptoms in the browser: `POST /api/auth/register` 500, empty response, registration fails; `GET /api/jobs` also 500 through `recruitfront.netlify.app` while `https://api.mukasamatthew.com/api/jobs` returns 200.
+
+**Cause:** Production build wrote `dist/_redirects` with a backend origin Netlify cannot reach — usually `http://67.205.157.80:8082` after the API was bound to `127.0.0.1:8082` only.
+
+**Fix:**
+
+1. Netlify → **Site configuration** → **Environment variables** → **Production** → set `BACKEND_API_URL` to `https://api.mukasamatthew.com` (remove any `:8082` or raw IP value).
+2. **Deploys** → **Trigger deploy** → **Clear cache and deploy site**.
+3. Confirm:
+
+   ```bash
+   curl -sS -o /dev/null -w '%{http_code}\n' https://recruitfront.netlify.app/api/jobs
+   ```
+
+   Expect `200`. Then retry candidate registration.
+
+**Noise in DevTools:** `Could not establish connection. Receiving end does not exist` comes from a browser extension, not this app. `GET /api/permissions` 403/401 is expected for candidates (admin-only); it does not block registration.
 
 ## Server (API + database)
 
