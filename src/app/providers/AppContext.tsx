@@ -615,21 +615,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
         emailVerified: u.emailVerified,
       });
       // Load real data in the background
+      const isAdmin = u.accountType === "admin";
       Promise.all([
         fetchJobsList(),
         appsApi.list().then(r => { if (r.success) persistApps(r.data as unknown as Application[]); }).catch(() => {}),
         settingsApi.get().then(r => { if (r.success) setSettings(prev => ({ ...prev, ...(r.data as unknown as AdminSettings) })); }).catch(() => {}),
         notifApi.list().then(r => { if (r.success) persistNotifs(r.data as unknown as Notification[]); }).catch(() => {}),
-        // Role-defaults are fetched for every login (harmless, small payload)
-        // so the frontend never has to hardcode its own copy of them.
         permissionsApi.roleDefaults().then(r => { if (r.success) setRoleDefaults(r.data.defaults as Record<AdminRole, Partial<PermissionOverride>>); }).catch(() => {}),
-        permissionsApi.list().then(r => {
-          if (r.success) {
-            const data = r.data as unknown as PermissionOverride[];
-            setPermissionOverrides(data);
-            try { localStorage.setItem(PERMS_KEY, JSON.stringify(data)); } catch {}
-          }
-        }).catch(() => {}),
+        ...(isAdmin
+          ? [
+              permissionsApi.list().then(r => {
+                if (r.success) {
+                  const data = r.data as unknown as PermissionOverride[];
+                  setPermissionOverrides(data);
+                  try { localStorage.setItem(PERMS_KEY, JSON.stringify(data)); } catch {}
+                }
+              }).catch(() => {}),
+            ]
+          : []),
         cvApi.get().then(r => {
           if (r.success && r.data.photoFile) {
             const photoUrl = r.data.photoFile;

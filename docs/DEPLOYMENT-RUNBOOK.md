@@ -13,26 +13,41 @@ Frontend (Netlify) and backend (Docker on your server) are deployed independentl
 
 ## Netlify (frontend)
 
+### API routing (recommended)
+
+| Layer | Pattern |
+| --- | --- |
+| Browser | `fetch("/api/…")` on the Netlify site origin |
+| Netlify | `dist/_redirects` proxies `/api/*` → `${BACKEND_API_URL}/api/*` |
+| Auth | Refresh cookie stays **first-party** on the frontend host (no cross-origin API URL in the bundle) |
+| Config | **`BACKEND_API_URL` only in Netlify environment variables** — not in git |
+
+Do **not** set `VITE_API_URL` in production unless you deliberately host the API on another origin and have configured backend CORS and cookie policy for that.
+
+The production build **fails** if `BACKEND_API_URL` uses port `8082`, a raw IP, `http://`, or a trailing `/api`.
+
 1. **Environment variables** (Site settings → Environment variables → Production):
 
    | Variable | Value |
    | --- | --- |
-   | `BACKEND_API_URL` | `https://api.mukasamatthew.com` (no trailing `/api`) |
-   | `VITE_API_URL` | `https://api.mukasamatthew.com/api` (direct API; required while `/api` proxy env is wrong) |
+   | `BACKEND_API_URL` | Your public API origin, e.g. `https://api.example.com` (no trailing `/api`) |
+   | `VITE_API_URL` | **Unset / empty** |
 
 2. **Deploy**: merge to `main` → Netlify builds automatically.
 
 3. **Verify after deploy**:
 
    ```bash
+   export SMOKE_BASE_URL="https://your-frontend.netlify.app"
+   export SMOKE_API_URL="https://api.example.com"
    npm run smoke:prod
    ```
 
    Or manually:
 
    ```bash
-   curl -sS -o /dev/null -w '%{http_code}\n' https://api.mukasamatthew.com/api/jobs
-   curl -sS -o /dev/null -w '%{http_code}\n' https://api.mukasamatthew.com/api/settings
+   curl -sS -o /dev/null -w '%{http_code}\n' "$SMOKE_BASE_URL/api/jobs"
+   curl -sS -o /dev/null -w '%{http_code}\n' "$SMOKE_API_URL/api/settings"
    ```
 
    Expect `200`. In the browser, hard refresh once (`Ctrl+Shift+R`) so old demo `localStorage` keys are cleared. Log in with backend demo accounts to confirm dashboards (passwords in backend README only).
@@ -47,7 +62,7 @@ Symptoms in the browser: `POST /api/auth/register` 500, empty response, registra
 
 **Fix:**
 
-1. Netlify → **Site configuration** → **Environment variables** → **Production** → set `BACKEND_API_URL` to `https://api.mukasamatthew.com` (remove any `:8082` or raw IP value).
+1. Netlify → **Environment variables** → **Production** → set **`BACKEND_API_URL`** to your public HTTPS API origin (remove any `:8082` or raw IP). Clear **`VITE_API_URL`** if it was set during an earlier workaround.
 2. **Deploys** → **Trigger deploy** → **Clear cache and deploy site**.
 3. Confirm:
 

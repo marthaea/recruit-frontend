@@ -5,14 +5,19 @@
 [build.environment]
   NODE_VERSION = "22"
   NITRO_PRESET = "netlify"
-  # Public API hostname (no trailing /api). Do not use SERVER_IP:8082 — that port is localhost-only on the host.
-  BACKEND_API_URL = "https://api.mukasamatthew.com"
-  # Browser calls the API directly (CORS + refresh cookies on api.mukasamatthew.com). Works even if /api proxy is misconfigured.
-  VITE_API_URL = "https://api.mukasamatthew.com/api"
 
-# The /api proxy is generated into dist/_redirects during the build from
-# BACKEND_API_URL. Keeping API traffic same-origin preserves refresh cookies
-# without committing an environment-specific backend domain.
+# Same-origin /api → public API (survives stale Netlify UI values like host:8082).
+[[redirects]]
+  from = "/api/*"
+  to = "https://api.mukasamatthew.com/api/:splat"
+  status = 200
+  force = true
+
+[context.production.environment]
+  BACKEND_API_URL = "https://api.mukasamatthew.com"
+  BACKEND_API_URL_CANONICAL = "https://api.mukasamatthew.com"
+
+# Browser uses same-origin /api only (see src/services/api/client.ts). Do not set VITE_API_URL in production.
 
 # Static assets from Vite are content-hashed (e.g. /assets/index-abc123.js)
 # so they can be cached for one year. Safe because the hash changes on every build.

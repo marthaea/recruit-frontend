@@ -28,3 +28,6 @@ jobs:
 
       - name: Production build
         run: npm run build
+
+      - name: Backend URL validation tests
+        run: npm run test:config

@@ -29,7 +29,7 @@ direct="$(curl --retry 3 -sS "$API_DIRECT/api/jobs")"
 direct_total="$(python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('total', len(d.get('data',[]))))" <<<"$direct")"
 
 if [[ "$total" != "$direct_total" ]]; then
-  echo "FAIL job count mismatch: netlify=$total direct=$direct_total" >&2
+  echo "FAIL job count mismatch: proxy=$total direct=$direct_total" >&2
   exit 1
 fi
 echo "OK   job count via proxy matches API ($total)"

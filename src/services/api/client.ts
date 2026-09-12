@@ -1,9 +1,8 @@
 // Central API client — all backend calls go through here.
 // See docs/07-frontend-integration.md in the backend repo for full integration guide.
 
-// VITE_API_URL supports an independently hosted frontend and backend.
-// If it is omitted, requests use the frontend's same-origin /api path, which
-// can be proxied by the hosting platform to preserve HTTP-only auth cookies.
+// Production default: same-origin /api (Netlify _redirects → BACKEND_API_URL).
+// Set VITE_API_URL only for exceptional split-host deployments (CORS + cookies required).
 const configuredApiUrl = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "");
 const BASE = configuredApiUrl || "/api";
 

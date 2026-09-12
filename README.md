@@ -23,8 +23,8 @@ Set these in **Site settings → Environment variables**:
 
 | Variable | Required | Value |
 | --- | --- | --- |
-| `BACKEND_API_URL` | Yes (production) | Backend origin only, no trailing `/api`. Example: `https://api.mukasamatthew.com`. |
-| `VITE_API_URL` | No | Leave empty so the browser uses same-origin `/api` (proxied by Netlify) |
+| `BACKEND_API_URL` | Yes (production) | Backend origin only, no trailing `/api`. Example: `https://api.example.com`. Set in **Netlify UI only** — do not commit production hostnames in `netlify.toml`. |
+| `VITE_API_URL` | No | **Leave empty.** Browser uses same-origin `/api` (Netlify proxy). Set only for intentional split-host setups (requires backend CORS). |
 
 The production build writes `dist/_redirects`:
 
@@ -70,7 +70,7 @@ Production: set `SEED_DEMO=true` and `SEED_ALLOW_PRODUCTION=true` when running t
 npm ci
 npm run dev
 npm run verify    # typecheck + production build (same as CI)
-npm run smoke:prod   # read-only production HTTP checks (see runbook)
+npm run smoke:prod   # requires SMOKE_BASE_URL + SMOKE_API_URL — see runbook
 npm run lint
 npm run typecheck
 npm run format:check
