@@ -3,7 +3,7 @@
 set -euo pipefail
 
 BASE="${SMOKE_BASE_URL:-https://recruitfront.netlify.app}"
-API_DIRECT="${SMOKE_API_URL:-http://67.205.157.80:8082}"
+API_DIRECT="${SMOKE_API_URL:-https://api.mukasamatthew.com}"
 
 check() {
   local url="$1"

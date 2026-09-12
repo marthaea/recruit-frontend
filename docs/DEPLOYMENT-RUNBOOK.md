@@ -7,7 +7,8 @@ Frontend (Netlify) and backend (Docker on your server) are deployed independentl
 | Layer | Where |
 | --- | --- |
 | Frontend | Netlify site **recruitfront** (e.g. `https://recruitfront.netlify.app`) |
-| API | `http://67.205.157.80:8082` (container port 8080, host 8082) |
+| API | `https://api.mukasamatthew.com` (Nginx Proxy Manager → host `:8082` / `caa-api`) |
+| API (direct, ops) | `http://67.205.157.80:8082` |
 | Database | PostgreSQL in Docker on the same host (`/opt/caa-recruitment`) |
 
 ## Netlify (frontend)
@@ -16,7 +17,7 @@ Frontend (Netlify) and backend (Docker on your server) are deployed independentl
 
    | Variable | Value |
    | --- | --- |
-   | `BACKEND_API_URL` | `http://67.205.157.80:8082` (no trailing `/api`) |
+   | `BACKEND_API_URL` | `https://api.mukasamatthew.com` (no trailing `/api`) |
    | `VITE_API_URL` | leave unset / empty |
 
 2. **Deploy**: merge to `main` → Netlify builds automatically.
@@ -30,8 +31,8 @@ Frontend (Netlify) and backend (Docker on your server) are deployed independentl
    Or manually:
 
    ```bash
-   curl -sS -o /dev/null -w '%{http_code}\n' https://recruitfront.netlify.app/api/jobs
-   curl -sS -o /dev/null -w '%{http_code}\n' https://recruitfront.netlify.app/api/settings
+   curl -sS -o /dev/null -w '%{http_code}\n' https://api.mukasamatthew.com/api/jobs
+   curl -sS -o /dev/null -w '%{http_code}\n' https://api.mukasamatthew.com/api/settings
    ```
 
    Expect `200`. In the browser, hard refresh once (`Ctrl+Shift+R`) so old demo `localStorage` keys are cleared. Log in with backend demo accounts to confirm dashboards (passwords in backend README only).
@@ -41,6 +42,8 @@ Frontend (Netlify) and backend (Docker on your server) are deployed independentl
 ## Server (API + database)
 
 Path on server: `/opt/caa-recruitment` (`docker compose`).
+
+**Public API hostname:** Cloudflare DNS `api.mukasamatthew.com` → Nginx Proxy Manager (`/opt/npm`, container `npm-app-1`) → `172.17.0.1:8082` → `caa-api`. TLS is terminated at NPM (Let’s Encrypt cert `npm-5`).
 
 ### Routine API update
 
@@ -73,7 +76,7 @@ export SEED_ALLOW_PRODUCTION=true
 ### Verify API directly
 
 ```bash
-curl -sS http://67.205.157.80:8082/api/jobs | head -c 200
+curl -sS https://api.mukasamatthew.com/api/jobs | head -c 200
 curl -sS -X POST http://67.205.157.80:8082/api/auth/login \
   -H 'Content-Type: application/json' \
   -d '{"email":"admin@caa.go.ug","password":"Admin@2026"}'
