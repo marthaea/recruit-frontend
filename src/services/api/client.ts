@@ -170,6 +170,12 @@ export const auth = {
   updateProfile: (data: { firstName?: string; lastName?: string; email?: string }) =>
     put<ApiResponse<UserResponse>>("/auth/profile", data),
 
+  forgotPassword: (email: string) =>
+    post<ApiResponse<{ message: string }>>("/auth/forgot-password", { email }),
+
+  resetPassword: (token: string, password: string) =>
+    post<ApiResponse<{ message: string }>>("/auth/reset-password", { token, password }),
+
   logout: () => post<ApiResponse<{ message: string }>>("/auth/logout"),
 };
 
@@ -395,6 +401,8 @@ export const adminUsers = {
   list: () => get<ListResponse<AdminUser>>("/users/admin"),
   create: (data: { email: string; password: string; firstName: string; lastName: string; adminRole: string }) =>
     post<ApiResponse<AdminUser>>("/users/admin", data),
+  changePassword: (id: number, password: string) =>
+    put<ApiResponse<null>>(`/users/admin/${id}/password`, { password }),
 };
 
 // ── Assessments ───────────────────────────────────────────────────────────────

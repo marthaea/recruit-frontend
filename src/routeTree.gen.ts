@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as VerifyEmailRouteImport } from './routes/verify-email'
 import { Route as VacanciesRouteImport } from './routes/vacancies'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as JobRouteImport } from './routes/job'
@@ -27,6 +28,11 @@ const VerifyEmailRoute = VerifyEmailRouteImport.update({
 const VacanciesRoute = VacanciesRouteImport.update({
   id: '/vacancies',
   path: '/vacancies',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RegisterRoute = RegisterRouteImport.update({
@@ -73,6 +79,7 @@ export interface FileRoutesByFullPath {
   '/job': typeof JobRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/vacancies': typeof VacanciesRoute
   '/verify-email': typeof VerifyEmailRoute
 }
@@ -84,6 +91,7 @@ export interface FileRoutesByTo {
   '/job': typeof JobRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/vacancies': typeof VacanciesRoute
   '/verify-email': typeof VerifyEmailRoute
 }
@@ -96,6 +104,7 @@ export interface FileRoutesById {
   '/job': typeof JobRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/vacancies': typeof VacanciesRoute
   '/verify-email': typeof VerifyEmailRoute
 }
@@ -109,6 +118,7 @@ export interface FileRouteTypes {
     | '/job'
     | '/login'
     | '/register'
+    | '/reset-password'
     | '/vacancies'
     | '/verify-email'
   fileRoutesByTo: FileRoutesByTo
@@ -120,6 +130,7 @@ export interface FileRouteTypes {
     | '/job'
     | '/login'
     | '/register'
+    | '/reset-password'
     | '/vacancies'
     | '/verify-email'
   id:
@@ -131,6 +142,7 @@ export interface FileRouteTypes {
     | '/job'
     | '/login'
     | '/register'
+    | '/reset-password'
     | '/vacancies'
     | '/verify-email'
   fileRoutesById: FileRoutesById
@@ -143,6 +155,7 @@ export interface RootRouteChildren {
   JobRoute: typeof JobRoute
   LoginRoute: typeof LoginRoute
   RegisterRoute: typeof RegisterRoute
+  ResetPasswordRoute: typeof ResetPasswordRoute
   VacanciesRoute: typeof VacanciesRoute
   VerifyEmailRoute: typeof VerifyEmailRoute
 }
@@ -161,6 +174,13 @@ declare module '@tanstack/react-router' {
       path: '/vacancies'
       fullPath: '/vacancies'
       preLoaderRoute: typeof VacanciesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/register': {
@@ -223,6 +243,7 @@ const rootRouteChildren: RootRouteChildren = {
   JobRoute: JobRoute,
   LoginRoute: LoginRoute,
   RegisterRoute: RegisterRoute,
+  ResetPasswordRoute: ResetPasswordRoute,
   VacanciesRoute: VacanciesRoute,
   VerifyEmailRoute: VerifyEmailRoute,
 }

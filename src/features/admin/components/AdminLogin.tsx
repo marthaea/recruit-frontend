@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 import {
   ShieldCheck, Eye, EyeOff,
 } from "lucide-react";
+import { auth as authApi } from "@/services/api/client";
 
 // ─── Login ────────────────────────────────────────────────────────────────────
 
@@ -10,6 +11,24 @@ export function AdminLogin({ onLogin }: { onLogin: (email: string, pw: string) =
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
   const [showPw, setShowPw] = useState(false);
+  const [sendingReset, setSendingReset] = useState(false);
+  const [forgotMsg, setForgotMsg] = useState(false);
+
+  const handleForgotPassword = async () => {
+    if (!email.trim()) {
+      setForgotMsg(false);
+      return;
+    }
+    setSendingReset(true);
+    try {
+      await authApi.forgotPassword(email.trim());
+    } catch {
+      // Same neutral response either way — see the candidate login page for why.
+    } finally {
+      setSendingReset(false);
+      setForgotMsg(true);
+    }
+  };
 
   return (
     <div className="flex min-h-[calc(100vh-108px)]">
@@ -79,8 +98,15 @@ export function AdminLogin({ onLogin }: { onLogin: (email: string, pw: string) =
               </button>
             </div>
             <div className="text-right">
-              <span className="text-xs text-caa-navy font-medium cursor-default">Forgot password?</span>
+              <button type="button" onClick={handleForgotPassword} disabled={sendingReset} className="text-xs text-caa-navy font-medium hover:underline disabled:opacity-60">
+                {sendingReset ? "Sending…" : "Forgot password?"}
+              </button>
             </div>
+            {forgotMsg && (
+              <p className="text-xs text-caa-success bg-caa-success/10 border border-caa-success/20 rounded-md px-3 py-2">
+                If {email} is registered, a password reset link has been sent to it. The link expires in 1 hour.
+              </p>
+            )}
             <button
               type="submit"
               className="w-full py-3 bg-caa-navy text-white font-semibold rounded-lg hover:bg-caa-navy-2 transition-colors text-sm tracking-wide"

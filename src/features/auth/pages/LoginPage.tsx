@@ -4,6 +4,7 @@ import {
   ShieldCheck, Bell, FileText, ArrowLeft, Eye, EyeOff, Mail, Lock, CheckCircle2,
 } from "lucide-react";
 import { useApp } from "@/app/providers/AppContext";
+import { auth as authApi } from "@/services/api/client";
 import logo from "@/assets/images/caa-logo.png";
 
 export function LoginPage() {
@@ -13,6 +14,26 @@ export function LoginPage() {
   const [password, setPassword] = useState("");
   const [show, setShow] = useState(false);
   const [forgotMsg, setForgotMsg] = useState(false);
+  const [sendingReset, setSendingReset] = useState(false);
+
+  const handleForgotPassword = async () => {
+    if (!email.trim()) {
+      pushToast({ type: "warning", title: "Enter your email first", message: "Type your email address above, then click \"Forgot password?\" again." });
+      return;
+    }
+    setSendingReset(true);
+    try {
+      await authApi.forgotPassword(email.trim());
+    } catch {
+      // Deliberately silent — the backend already responds the same neutral
+      // way whether or not the email is registered, so a network-level
+      // failure is the only case that reaches here, and there's nothing
+      // actionable to tell the candidate beyond the message already shown.
+    } finally {
+      setSendingReset(false);
+      setForgotMsg(true);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -136,13 +157,13 @@ export function LoginPage() {
               <label className="flex items-center gap-2 text-caa-muted">
                 <input type="checkbox" className="rounded border-caa-border" /> Keep me signed in
               </label>
-              <button type="button" onClick={() => setForgotMsg(true)} className="text-caa-navy hover:underline font-medium">
-                Forgot password?
+              <button type="button" onClick={handleForgotPassword} disabled={sendingReset} className="text-caa-navy hover:underline font-medium disabled:opacity-60">
+                {sendingReset ? "Sending…" : "Forgot password?"}
               </button>
             </div>
             {forgotMsg && (
               <p className="text-xs text-caa-success bg-caa-success/10 border border-caa-success/20 rounded-md px-3 py-2">
-                A password reset link would be sent to {email || "your registered email"}.
+                If {email} is registered, a password reset link has been sent to it. The link expires in 1 hour.
               </p>
             )}
 

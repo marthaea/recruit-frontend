@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, Fragment } from "react";
 import {
-  Plus, UserPlus, Building2,
+  Plus, UserPlus, Building2, KeyRound,
 } from "lucide-react";
 import {
   useApp, ADMIN_ROLES, ADMIN_ROLE_LABELS, type AdminRole,
@@ -9,9 +9,37 @@ import { adminUsers as adminUsersApi, departments as departmentsApi, type AdminU
 import { Field, Section, fi } from "./shared";
 
 export function AdministrationTab({ logAction }: { logAction: any }) {
-  const { pushToast, departments, loadDepartments, addDepartment } = useApp();
+  const { auth, pushToast, departments, loadDepartments, addDepartment } = useApp();
+  const isSuper = auth.adminRole === "super";
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
+
+  // ── Reset another admin's password ────────────────────────────────────────
+  // Direct path for a super admin — doesn't depend on email/SMTP being
+  // configured, unlike the self-service forgot-password link on the sign-in
+  // page. Mainly for onboarding a new admin's first password, or unblocking
+  // someone who's locked out and email isn't set up yet.
+  const [resettingId, setResettingId] = useState<number | null>(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [savingReset, setSavingReset] = useState(false);
+
+  const submitPasswordReset = async (user: AdminUser) => {
+    if (newPassword.length < 8) {
+      pushToast({ type: "warning", title: "Password too short", message: "Password must be at least 8 characters." });
+      return;
+    }
+    setSavingReset(true);
+    try {
+      await adminUsersApi.changePassword(user.id, newPassword);
+      logAction("Reset admin password", `${user.firstName} ${user.lastName} (${user.email})`);
+      pushToast({ type: "success", title: "Password updated", message: `${user.firstName} ${user.lastName} has been signed out everywhere and can sign in with the new password.` });
+      setResettingId(null); setNewPassword("");
+    } catch (err) {
+      pushToast({ type: "warning", title: "Could not update password", message: err instanceof Error ? err.message : "Please try again." });
+    } finally {
+      setSavingReset(false);
+    }
+  };
 
   const loadUsers = () => {
     adminUsersApi.list().then((r) => { if (r.success) setUsers(r.data); }).catch(() => {}).finally(() => setLoadingUsers(false));
@@ -94,17 +122,51 @@ export function AdministrationTab({ logAction }: { logAction: any }) {
           <div className="overflow-x-auto -mx-1">
             <table className="w-full min-w-[480px] text-sm">
               <thead className="text-xs text-caa-muted">
-                <tr><th className="text-left p-1.5">Name</th><th className="text-left p-1.5">Email</th><th className="text-left p-1.5">Role</th></tr>
+                <tr><th className="text-left p-1.5">Name</th><th className="text-left p-1.5">Email</th><th className="text-left p-1.5">Role</th>{isSuper && <th className="text-left p-1.5">Actions</th>}</tr>
               </thead>
               <tbody className="divide-y divide-caa-border">
                 {users.map((u) => (
-                  <tr key={u.id}>
-                    <td className="p-1.5 font-medium text-caa-body">{u.firstName} {u.lastName}</td>
-                    <td className="p-1.5 text-caa-muted">{u.email}</td>
-                    <td className="p-1.5"><span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-caa-navy/10 text-caa-navy">{ADMIN_ROLE_LABELS[u.adminRole as AdminRole] ?? u.adminRole}</span></td>
-                  </tr>
+                  <Fragment key={u.id}>
+                    <tr>
+                      <td className="p-1.5 font-medium text-caa-body">{u.firstName} {u.lastName}</td>
+                      <td className="p-1.5 text-caa-muted">{u.email}</td>
+                      <td className="p-1.5"><span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-caa-navy/10 text-caa-navy">{ADMIN_ROLE_LABELS[u.adminRole as AdminRole] ?? u.adminRole}</span></td>
+                      {isSuper && (
+                        <td className="p-1.5">
+                          <button
+                            onClick={() => { setResettingId(resettingId === u.id ? null : u.id); setNewPassword(""); }}
+                            className="text-xs text-caa-navy hover:underline inline-flex items-center gap-1"
+                          >
+                            <KeyRound className="h-3 w-3" /> Reset password
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                    {isSuper && resettingId === u.id && (
+                      <tr key={`${u.id}-reset`}>
+                        <td colSpan={4} className="p-2 bg-caa-surface">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <input
+                              type="password"
+                              className={fi + " max-w-[220px]"}
+                              value={newPassword}
+                              onChange={(e) => setNewPassword(e.target.value)}
+                              placeholder="New password (min. 8 characters)"
+                              autoFocus
+                            />
+                            <button onClick={() => submitPasswordReset(u)} disabled={savingReset} className="px-3 py-1.5 text-xs font-semibold bg-caa-navy text-white rounded-md disabled:opacity-60">
+                              {savingReset ? "Saving…" : "Save new password"}
+                            </button>
+                            <button onClick={() => { setResettingId(null); setNewPassword(""); }} className="px-3 py-1.5 text-xs font-medium border border-caa-border rounded-md">
+                              Cancel
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 ))}
-                {!loadingUsers && users.length === 0 && <tr><td colSpan={3} className="p-3 text-center text-xs text-caa-muted">No admin accounts yet.</td></tr>}
+                {!loadingUsers && users.length === 0 && <tr><td colSpan={isSuper ? 4 : 3} className="p-3 text-center text-xs text-caa-muted">No admin accounts yet.</td></tr>}
               </tbody>
             </table>
           </div>
