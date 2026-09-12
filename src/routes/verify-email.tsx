@@ -4,6 +4,6 @@ import { VerifyEmailPage } from "@/features/auth/pages/VerifyEmailPage";
 
 export const Route = createFileRoute("/verify-email")({
   validateSearch: z.object({ token: z.string().optional() }),
-  head: () => ({ meta: [{ title: "Verify Email — CAA Uganda" }] }),
+  head: () => ({ meta: [{ title: "Verify Email — UCAA" }] }),
   component: VerifyEmailPage,
 });

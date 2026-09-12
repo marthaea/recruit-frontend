@@ -13,7 +13,7 @@ function input(cls = "") { return "w-full px-2.5 py-1.5 text-sm border border-ca
 const label = "block text-xs font-medium text-caa-body mb-1";
 
 export function ApplyPage() {
-  const { auth, sessionRestoring, openSignInPrompt, jobs, applications, cv, hasCv, saveCv, addApplication, updateApplicationStatus, pushToast } = useApp();
+  const { auth, sessionRestoring, openSignInPrompt, jobs, applications, cv, hasCv, saveCv, addApplication, updateApplicationStatus, pushToast, settings } = useApp();
   const hasExistingApplication = applications.some((a) => a.candidateEmail === auth.email);
   const { jobId } = useSearch({ from: "/apply" });
   const navigate = useNavigate();
@@ -49,11 +49,16 @@ export function ApplyPage() {
   });
   const [submitted, setSubmitted] = useState<string | null>(null);
 
+  // The org-wide floor (Settings → "Minimum applicant age") sets a baseline no
+  // job can go below, regardless of what a specific job's own minAge says —
+  // the two are complementary, not duplicates: a job can require an older
+  // minimum than the floor, but never a younger one.
+  const effectiveMinAge = Math.max(job.minAge, settings.minAgeThreshold);
   const ageOk = useMemo(() => {
     if (!data.personal.dob) return null;
     const age = Math.floor((Date.now() - new Date(data.personal.dob).getTime()) / (365.25 * 24 * 3600 * 1000));
-    return age >= job.minAge;
-  }, [data.personal.dob, job.minAge]);
+    return age >= effectiveMinAge;
+  }, [data.personal.dob, effectiveMinAge]);
 
   /* ---------- step definitions (Eligibility step only exists when the job has screening questions) ---------- */
   const personalStep = () => renderPersonalStep();
@@ -138,7 +143,7 @@ export function ApplyPage() {
   };
 
   const submit = () => {
-    if (ageOk === false) { pushToast({ type: "warning", title: `Minimum age for this role is ${job.minAge}` }); return; }
+    if (ageOk === false) { pushToast({ type: "warning", title: `Minimum age for this role is ${effectiveMinAge}` }); return; }
     const missing = getMissingFields();
     if (missing.length > 0) {
       pushToast({ type: "warning", title: "Application incomplete", message: `Please complete: ${missing.map((m) => m.label).join(", ")}` });
@@ -289,7 +294,7 @@ export function ApplyPage() {
             <div>
               <label className={label}>Date of birth</label>
               <input type="date" className={input()} value={data.personal.dob} onChange={(e) => setPersonal({ dob: e.target.value })} />
-              {ageOk === false && <p className="text-[11px] text-caa-danger mt-1 flex items-center gap-1"><AlertCircle className="h-3 w-3" /> Min age for this role is {job.minAge}.</p>}
+              {ageOk === false && <p className="text-[11px] text-caa-danger mt-1 flex items-center gap-1"><AlertCircle className="h-3 w-3" /> Min age for this role is {effectiveMinAge}.</p>}
             </div>
             <div>
               <label className={label}>Gender</label>
@@ -464,7 +469,7 @@ function Combobox({ options, value, onChange, placeholder }: { options: string[]
 }
 
 /* ---------- Qualifications ---------- */
-function QualificationsStep({ data, setData }: { data: CvProfile; setData: (d: CvProfile) => void }) {
+export function QualificationsStep({ data, setData }: { data: CvProfile; setData: (d: CvProfile) => void }) {
   const add = (level: QualLevel) => {
     const q: CvQualification = { level, course: "", institution: "", year: "" };
     if (level === "O-Level" || level === "A-Level") { q.school = ""; q.indexNumber = ""; q.subjects = []; q.aggregate = ""; }
@@ -603,7 +608,7 @@ function FileField({ label: lbl, value, onChange }: { label: string; value?: str
 }
 
 /* ---------- Skills ---------- */
-function SkillsStep({ data, setData }: { data: CvProfile; setData: (d: CvProfile) => void }) {
+export function SkillsStep({ data, setData }: { data: CvProfile; setData: (d: CvProfile) => void }) {
   const [text, setText] = useState("");
   const add = () => { const t = text.trim(); if (!t) return; setData({ ...data, skills: [...data.skills, t] }); setText(""); };
   return (
@@ -626,7 +631,7 @@ function SkillsStep({ data, setData }: { data: CvProfile; setData: (d: CvProfile
 }
 
 /* ---------- Experience ---------- */
-function ExperienceStep({ data, setData }: { data: CvProfile; setData: (d: CvProfile) => void }) {
+export function ExperienceStep({ data, setData }: { data: CvProfile; setData: (d: CvProfile) => void }) {
   const add = () => setData({ ...data, experience: [...data.experience, { title: "", organisation: "", start: "", end: "", description: "" }] });
   const upd = (i: number, p: Partial<CvProfile["experience"][number]>) => setData({ ...data, experience: data.experience.map((x, idx) => idx === i ? { ...x, ...p } : x) });
   const rm = (i: number) => setData({ ...data, experience: data.experience.filter((_, idx) => idx !== i) });
@@ -651,7 +656,7 @@ function ExperienceStep({ data, setData }: { data: CvProfile; setData: (d: CvPro
 }
 
 /* ---------- Referees ---------- */
-function RefereesStep({ data, setData }: { data: CvProfile; setData: (d: CvProfile) => void }) {
+export function RefereesStep({ data, setData }: { data: CvProfile; setData: (d: CvProfile) => void }) {
   const upd = (i: number, p: Partial<CvProfile["referees"][number]>) => setData({ ...data, referees: data.referees.map((x, idx) => idx === i ? { ...x, ...p } : x) });
   return (
     <div className="space-y-3">

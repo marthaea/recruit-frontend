@@ -358,7 +358,7 @@ export function downloadApplicationSummary(
   doc.text("What happens next?", 15, y + 7);
   doc.setTextColor(50, 50, 50); doc.setFont("helvetica", "normal"); doc.setFontSize(8.5);
   const steps = [
-    "1. Your application is being reviewed by the CAA Uganda HR team.",
+    "1. Your application is being reviewed by the UCAA HR team.",
     "2. Shortlisted candidates will be contacted within 14 working days.",
     "3. All communication will be sent to your registered email address.",
     "4. Do not call UCAA offices to enquire about application status — check your dashboard.",
@@ -377,7 +377,7 @@ export function downloadApplicationSummary(
 
 export function downloadStaffReport(staff: StaffRecord[], actor: string) {
   const doc = new jsPDF();
-  header(doc, "Internal Staff Register", `${staff.length} verified CAA staff records`);
+  header(doc, "Internal Staff Register", `${staff.length} verified UCAA staff records`);
   autoTable(doc, {
     startY: 65,
     head: [["Emp No.", "Full Name", "Department", "Position", "Email", "Joined", "Status"]],
@@ -757,7 +757,7 @@ export function downloadJobAdvert(job: Job, actor: string, requirements: JobRequ
   doc.setFont("helvetica", "bold");
   doc.setFontSize(8);
   doc.text(
-    isInternal ? "INTERNAL VACANCY — CAA STAFF ONLY" : "EXTERNAL VACANCY — OPEN TO ALL QUALIFIED CANDIDATES",
+    isInternal ? "INTERNAL VACANCY — UCAA STAFF ONLY" : "EXTERNAL VACANCY — OPEN TO ALL QUALIFIED CANDIDATES",
     105, y + 4.8,
     { align: "center" },
   );
@@ -890,9 +890,9 @@ export function downloadJobAdvert(job: Job, actor: string, requirements: JobRequ
   doc.setFontSize(8.5);
   doc.setTextColor(40, 40, 40);
   const howTo = doc.splitTextToSize(
-    `Eligible candidates should apply online via the CAA Uganda e-Recruitment Portal at caa.go.ug. ` +
+    `Eligible candidates should apply online via the UCAA e-Recruitment Portal at caa.go.ug. ` +
     `Applications must be submitted no later than ${job.closes}. Only shortlisted candidates will be contacted. ` +
-    `CAA Uganda does not charge any fees at any stage of recruitment.`,
+    `UCAA does not charge any fees at any stage of recruitment.`,
     178,
   );
   doc.text(howTo, 15, y + 14);

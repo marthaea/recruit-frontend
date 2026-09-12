@@ -5,6 +5,7 @@ import {
 import {
   type StaffRecord,
 } from "@/services/documents/pdf-reports";
+import { audit as auditApi } from "@/services/api/client";
 
 // ─── Staff data ───────────────────────────────────────────────────────────────
 
@@ -30,7 +31,7 @@ export const STATUS_COLORS: Record<string, string> = {
   Offered: "#0d9488", Declined: "#ef4444",
 };
 
-export function AnimatedSection({ children, delay = 0, className = "" }: { children: React.ReactNode; delay?: number; className?: string }) {
+export function AnimatedSection({ children, delay = 0, className = "", ...rest }: { children: React.ReactNode; delay?: number; className?: string } & React.HTMLAttributes<HTMLDivElement>) {
   const ref = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
   useEffect(() => {
@@ -51,6 +52,7 @@ export function AnimatedSection({ children, delay = 0, className = "" }: { child
         transform: visible ? "none" : "translateY(18px)",
         transition: `opacity 0.45s ease ${delay}ms, transform 0.45s ease ${delay}ms`,
       }}
+      {...rest}
     >
       {children}
     </div>
@@ -110,10 +112,37 @@ export function buildEmail(status: string, candidateName: string, jobTitle: stri
   }
 }
 
+// ─── Date/time offset helpers ──────────────────────────────────────────────────
+// `<input type="datetime-local">` yields a plain "YYYY-MM-DDTHH:mm" string with
+// no timezone offset; the backend requires a full ISO-8601 offset (it parses
+// with Java's OffsetDateTime.parse, which throws on anything without one — this
+// was the actual cause of assessment scheduling/rescheduling always failing).
+// These convert using the browser's own local offset in both directions, so a
+// round trip (save, reload, redisplay) always shows the same wall-clock time
+// the user entered, not a UTC-shifted one.
+
+export function toOffsetIso(localValue: string): string {
+  const d = new Date(localValue);
+  const offsetMin = -d.getTimezoneOffset();
+  const sign = offsetMin >= 0 ? "+" : "-";
+  const abs = Math.abs(offsetMin);
+  const oh = String(Math.floor(abs / 60)).padStart(2, "0");
+  const om = String(abs % 60).padStart(2, "0");
+  const seconds = localValue.length > 16 ? "" : ":00";
+  return `${localValue}${seconds}${sign}${oh}:${om}`;
+}
+
+export function fromOffsetIso(iso: string): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 // ─── Applications ─────────────────────────────────────────────────────────────
 
 const QUAL_ORDER: Record<string, number> = {
-  "O-Level": 0, "A-Level": 1, Certificate: 2, Diploma: 3, Degree: 4, Masters: 5, PhD: 6,
+  "O-Level": 0, "A-Level": 1, Certificate: 2, Diploma: 3, Degree: 4, Postgraduate: 5, Masters: 6, PhD: 7,
 };
 
 export function autoQualify(app: Application, job: Job | undefined, cv: any, jobCriteria: JobCriteria | undefined): { ok: boolean; checks: { label: string; pass: boolean; detail: string }[] } {
@@ -255,6 +284,43 @@ export function autoQualify(app: Application, job: Job | undefined, cv: any, job
 }
 
 export type ScreeningResult = { app: Application; ok: boolean; checks: { label: string; pass: boolean; detail: string }[] };
+
+// ─── Accountability / audit reporting ──────────────────────────────────────────
+// Writes a single, server-stored audit entry per confirmed screening run —
+// who ran it, what threshold/criteria was used, and a per-candidate
+// qualify/disqualify reason — so the Shortlisting Reports view can be built
+// from tamper-evident backend data instead of reconstructing "why" after the
+// fact. Best-effort: a failure here must never block the screening itself,
+// since the candidate status changes have already been applied.
+export type ScreeningAuditCandidate = {
+  id: number; name?: string; email?: string; jobId?: number; jobTitle?: string;
+  decision: "Shortlisted" | "Declined"; reasons: string[];
+};
+
+export async function logScreeningRun(params: {
+  action: string;
+  jobId?: number;
+  jobTitle?: string;
+  threshold?: Record<string, unknown>;
+  candidates: ScreeningAuditCandidate[];
+}) {
+  const total = params.candidates.length;
+  const qualified = params.candidates.filter((c) => c.decision === "Shortlisted").length;
+  const disqualified = total - qualified;
+  const metadata = {
+    kind: "shortlisting-run",
+    jobId: params.jobId ?? null,
+    jobTitle: params.jobTitle ?? null,
+    threshold: params.threshold ?? null,
+    stats: { total, qualified, disqualified, qualifiedPct: total > 0 ? Math.round((qualified / total) * 1000) / 10 : 0 },
+    candidates: params.candidates,
+  };
+  try {
+    await auditApi.create({ action: params.action, target: params.jobTitle ?? `${total} candidate${total !== 1 ? "s" : ""}`, metadata });
+  } catch {
+    // Non-fatal — see comment above.
+  }
+}
 
 
 export const fi = "w-full px-2.5 py-1.5 text-sm border border-caa-border rounded-md focus:outline-none focus:border-caa-navy bg-white";

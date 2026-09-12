@@ -10,7 +10,7 @@ import {
 } from "@/app/providers/AppContext";
 import { AnimatedSection, STATUS_COLORS } from "./shared";
 
-export function DashboardTab({ jobs, applications, isExpired, navigate, settings }: any) {
+export function DashboardTab({ jobs, applications, isExpired, navigate, settings, auth }: any) {
   const activeJobs = jobs.filter((j: Job) => !isExpired(j));
   const printRef = useRef<HTMLDivElement>(null);
 
@@ -58,7 +58,7 @@ export function DashboardTab({ jobs, applications, isExpired, navigate, settings
     if (!el) return;
     const w = window.open("", "_blank");
     if (!w) return;
-    w.document.write(`<html><head><title>Dashboard Charts — CAA</title><style>
+    w.document.write(`<html><head><title>Dashboard Charts — UCAA</title><style>
       body { font-family: helvetica,sans-serif; padding: 24px; }
       h1 { color: #0d2454; font-size: 18px; margin-bottom: 4px; }
       p { color: #888; font-size: 12px; margin-bottom: 20px; }
@@ -73,31 +73,58 @@ export function DashboardTab({ jobs, applications, isExpired, navigate, settings
     w.print();
   };
 
+  const today = new Date().toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric" });
+
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <h1 className="font-bold text-xl text-caa-body">Dashboard</h1>
-        <button onClick={printCharts} className="inline-flex items-center gap-2 px-3 py-1.5 text-sm border border-caa-border rounded-md hover:border-caa-navy text-caa-body">
+      {/* Profile header — square (not circular, per earlier fix) profile photo,
+          greeting, and the day's real actions in one card instead of two bare
+          text rows. */}
+      <div className="admin-card p-5 flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-4 min-w-0">
+          {auth?.photoUrl ? (
+            <img
+              src={auth.photoUrl}
+              alt="Profile"
+              className="h-14 w-14 rounded-2xl object-cover border border-caa-border shadow-sm shrink-0"
+            />
+          ) : (
+            <div className="h-14 w-14 rounded-2xl bg-caa-navy/10 border border-caa-border flex items-center justify-center shrink-0">
+              <span className="text-caa-navy font-bold select-none">
+                {auth?.firstName?.[0]}{auth?.lastName?.[0]}
+              </span>
+            </div>
+          )}
+          <div className="min-w-0">
+            <h1 className="font-bold text-2xl text-caa-body truncate">Hi {auth?.firstName ?? "there"}</h1>
+            <p className="text-xs text-caa-muted mt-0.5">{today}</p>
+          </div>
+        </div>
+        <button onClick={printCharts} className="inline-flex items-center gap-2 px-3.5 py-2 text-sm font-medium border border-caa-border rounded-xl hover:border-caa-navy hover:bg-caa-navy/5 text-caa-body transition-colors shrink-0">
           <Printer className="h-4 w-4" /> Print charts
         </button>
       </div>
 
       {/* Stat cards */}
-      <AnimatedSection className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <AnimatedSection data-tour="admin-stats" className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { Icon: Briefcase,     label: "Active Listings",      n: activeJobs.length,    color: "text-caa-navy",    tab: "jobs" },
-          { Icon: Users,         label: "Total Applications",   n: applications.length,  color: "text-caa-navy-2",  tab: "apps" },
-          { Icon: GraduationCap, label: "Intern Applications",  n: applications.filter((a: Application) => a.cgpa !== undefined).length, color: "text-caa-success", tab: "interns" },
-          { Icon: Archive,       label: "Expired Listings",     n: jobs.filter(isExpired).length, color: "text-caa-danger", tab: "jobs" },
+          { Icon: Briefcase,     label: "Active Listings",      n: activeJobs.length,    color: "text-caa-navy",     bg: "bg-caa-navy/10",     tab: "jobs" },
+          { Icon: Users,         label: "Total Applications",   n: applications.length,  color: "text-caa-navy-2",   bg: "bg-caa-navy-2/10",   tab: "apps" },
+          { Icon: GraduationCap, label: "Intern Applications",  n: applications.filter((a: Application) => a.cgpa !== undefined).length, color: "text-caa-success", bg: "bg-caa-success/10", tab: "interns" },
+          { Icon: Archive,       label: "Expired Listings",     n: jobs.filter(isExpired).length, color: "text-caa-danger", bg: "bg-caa-danger/10", tab: "jobs" },
         ].map((s) => (
-          <button key={s.label} onClick={() => navigate({ to: "/admin", search: { tab: s.tab } })} className="caa-card p-4 text-left hover:shadow-md transition-shadow">
-            <s.Icon className="h-5 w-5 text-caa-navy" />
+          <button key={s.label} onClick={() => navigate({ to: "/admin", search: { tab: s.tab } })} className="admin-card admin-card-hover p-4 text-left">
+            <div className={`h-9 w-9 rounded-full flex items-center justify-center ${s.bg}`}>
+              <s.Icon className={`h-4.5 w-4.5 ${s.color}`} />
+            </div>
             <p className="text-[11px] text-caa-muted mt-3">{s.label}</p>
             <p className={`font-bold text-3xl mt-1 ${s.color}`}>{s.n}</p>
             {s.label === "Total Applications" && (
-              <p className={`text-[11px] font-semibold mt-1 ${weekDelta > 0 ? "text-caa-success" : weekDelta < 0 ? "text-caa-danger" : "text-caa-muted"}`}>
-                {weekDelta > 0 ? `▲ +${weekDelta}` : weekDelta < 0 ? `▼ ${weekDelta}` : "—"} vs last week ({thisWeek} this week)
-              </p>
+              <span className={`inline-flex items-center gap-1 mt-2 text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                weekDelta > 0 ? "bg-caa-success/12 text-caa-success" : weekDelta < 0 ? "bg-caa-danger/12 text-caa-danger" : "bg-caa-muted/10 text-caa-muted"
+              }`}>
+                {weekDelta > 0 ? `▲ +${weekDelta}` : weekDelta < 0 ? `▼ ${weekDelta}` : "—"} vs last week
+              </span>
             )}
           </button>
         ))}
@@ -106,7 +133,7 @@ export function DashboardTab({ jobs, applications, isExpired, navigate, settings
       {/* Recruitment Funnel + Pending Actions */}
       <AnimatedSection delay={80} className="grid grid-cols-1 md:grid-cols-2 gap-5">
         {/* Funnel */}
-        <div className="caa-card p-4">
+        <div className="admin-card p-4">
           <h3 className="text-xs font-semibold uppercase tracking-widest text-caa-navy mb-4">Recruitment Funnel</h3>
           {(() => {
             const stages = [
@@ -122,6 +149,7 @@ export function DashboardTab({ jobs, applications, isExpired, navigate, settings
                 {stages.map((s) => (
                   <button key={s.label} onClick={() => navigate({ to: "/admin", search: { tab: "apps" } })} className="w-full text-left group">
                     <div className="flex items-center gap-2">
+                      <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
                       <span className="text-[11px] text-caa-muted w-28 shrink-0 group-hover:text-caa-body transition-colors">{s.label}</span>
                       <div className="flex-1 bg-caa-surface rounded-full overflow-hidden h-5">
                         <div
@@ -169,7 +197,7 @@ export function DashboardTab({ jobs, applications, isExpired, navigate, settings
             { count: lowApplicantJobs,       label: "vacanc" + (lowApplicantJobs !== 1 ? "ies" : "y") + " closing in ≤3 days with fewer than 3 applicants", color: "text-caa-danger", bg: "bg-caa-danger/8", tab: "jobs" },
           ].filter((i) => i.count > 0);
           return (
-            <div className="caa-card p-4">
+            <div className="admin-card p-4">
               <h3 className="text-xs font-semibold uppercase tracking-widest text-caa-navy mb-4">Pending Actions</h3>
               {items.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-24 text-center">
@@ -181,8 +209,8 @@ export function DashboardTab({ jobs, applications, isExpired, navigate, settings
                 <div className="space-y-2">
                   {items.map((item) => (
                     <button key={item.label} onClick={() => navigate({ to: "/admin", search: { tab: item.tab as any } })}
-                      className={`w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-lg ${item.bg} hover:opacity-80 transition-opacity`}>
-                      <span className={`text-2xl font-bold ${item.color} shrink-0 w-10 text-center`}>{item.count}</span>
+                      className={`w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-xl ${item.bg} hover:opacity-80 transition-opacity`}>
+                      <span className={`h-9 w-9 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${item.color} bg-white/60`}>{item.count}</span>
                       <span className={`text-xs font-medium ${item.color}`}>{item.label}</span>
                     </button>
                   ))}
@@ -196,7 +224,7 @@ export function DashboardTab({ jobs, applications, isExpired, navigate, settings
       {/* Charts grid — printable */}
       <AnimatedSection delay={160}>
       <div ref={printRef} className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        <div className="caa-card p-4">
+        <div className="admin-card p-4">
           <h3 className="text-xs font-semibold uppercase tracking-widest text-caa-navy mb-4">Applications by Status</h3>
           <ResponsiveContainer width="100%" height={200}>
             <PieChart>
@@ -210,7 +238,7 @@ export function DashboardTab({ jobs, applications, isExpired, navigate, settings
           </ResponsiveContainer>
         </div>
 
-        <div className="caa-card p-4">
+        <div className="admin-card p-4">
           <h3 className="text-xs font-semibold uppercase tracking-widest text-caa-navy mb-4">Applications by Department</h3>
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={deptData} margin={{ left: -20 }}>
@@ -223,7 +251,7 @@ export function DashboardTab({ jobs, applications, isExpired, navigate, settings
           </ResponsiveContainer>
         </div>
 
-        <div className="caa-card p-4 md:col-span-2">
+        <div className="admin-card p-4 md:col-span-2">
           <h3 className="text-xs font-semibold uppercase tracking-widest text-caa-navy mb-4">Application Trend (last 6 months)</h3>
           <ResponsiveContainer width="100%" height={150}>
             <LineChart data={trend}>

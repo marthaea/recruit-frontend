@@ -6,8 +6,9 @@ import {
 import {
   useApp, type Job, type JobStatus, type Visibility, type QualLevel, type Application, JOB_STATUS_LABELS,
   type JobCriteria, type JobRequirement, type RequirementKind, type RequirementUsage, type ScreeningQuestion,
-  type AssessmentType, ASSESSMENT_TYPES, type JobTemplate,
+  type JobTemplate,
 } from "@/app/providers/AppContext";
+import { type AssessmentKind } from "@/services/api/client";
 import {
   SALARY_BANDS, EMPLOYMENT_TYPES, DEPARTMENTS, QUAL_LEVELS, LOCATIONS, REQUIREMENT_KIND_META,
   O_LEVEL_SUBJECTS, A_LEVEL_SUBJECTS, O_LEVEL_GRADES, A_LEVEL_GRADES,
@@ -28,6 +29,13 @@ const emptyJob: Omit<Job, "id" | "abbr"> = {
   jobRef: "", reportsTo: "", vacancies: 1, aboutRole: "", accountabilities: [], specialSkills: [],
 };
 
+const ASSESSMENT_KIND_LIST: AssessmentKind[] = ["written", "psychometric", "interview", "practical"];
+const ASSESSMENT_KIND_LABELS: Record<AssessmentKind, string> = {
+  written: "Written", psychometric: "Psychometric", interview: "Interview", practical: "Practical",
+};
+const nextAssessmentType = (exclude: AssessmentKind | undefined): AssessmentKind =>
+  ASSESSMENT_KIND_LIST.find((t) => t !== exclude) ?? "practical";
+
 const blankCriteriaDraft = (): Omit<JobCriteria, "jobId"> => ({
   minCgpa: undefined,
   requiredKeywords: [],
@@ -36,7 +44,7 @@ const blankCriteriaDraft = (): Omit<JobCriteria, "jobId"> => ({
   minExperienceYears: undefined,
   requiredQualLevel: undefined,
   disqualifyingUniversities: [],
-  assessmentTypes: [],
+  assessmentTypes: { assessment1: "written" },
   requirements: [],
 });
 
@@ -48,7 +56,7 @@ const criteriaFromExisting = (e: JobCriteria | undefined): Omit<JobCriteria, "jo
   minExperienceYears: e?.minExperienceYears,
   requiredQualLevel: e?.requiredQualLevel,
   disqualifyingUniversities: e?.disqualifyingUniversities ?? [],
-  assessmentTypes: e?.assessmentTypes ?? [],
+  assessmentTypes: e?.assessmentTypes ?? { assessment1: "written" },
   requirements: e?.requirements ?? [],
 });
 
@@ -169,7 +177,7 @@ function parseJobFromText(text: string): Partial<Omit<Job, "id" | "abbr">> {
   // was misread as requiring a PhD/Masters just because that word appeared
   // somewhere in the text, regardless of context.
   const ADVANTAGE_NEARBY = /(an?\s+)?(added\s+)?advantage|desirable|preferred|is a plus|added benefit/i;
-  for (const q of ["O-Level", "A-Level", "Certificate", "Diploma", "Degree", "Masters", "PhD"] as const) {
+  for (const q of ["O-Level", "A-Level", "Certificate", "Diploma", "Degree", "Postgraduate", "Masters", "PhD"] as const) {
     const m = text.match(new RegExp(`\\b${q}\\b([^.\\n]{0,40})`, "i"));
     if (m && !ADVANTAGE_NEARBY.test(m[1] || "")) { result.requiredQualification = q; break; }
   }
@@ -479,11 +487,18 @@ export function JobsTab({ jobs, applications, isExpired, addJob, updateJob, dele
   const removeKw = (k: string) => setCriteriaDraft((d) => ({ ...d, requiredKeywords: d.requiredKeywords.filter((x) => x !== k) }));
   const addUni = () => { if (uni.trim()) { setCriteriaDraft((d) => ({ ...d, disqualifyingUniversities: [...(d.disqualifyingUniversities ?? []), uni.trim()] })); setUni(""); } };
   const removeUni = (u: string) => setCriteriaDraft((d) => ({ ...d, disqualifyingUniversities: (d.disqualifyingUniversities ?? []).filter((x) => x !== u) }));
-  const toggleAssessmentType = (t: AssessmentType) =>
+  const setAssessment1 = (t: AssessmentKind) =>
+    setCriteriaDraft((d) => ({ ...d, assessmentTypes: { ...d.assessmentTypes, assessment1: t } }));
+  const setRequiresAssessment2 = (on: boolean) =>
     setCriteriaDraft((d) => ({
       ...d,
-      assessmentTypes: (d.assessmentTypes ?? []).includes(t) ? (d.assessmentTypes ?? []).filter((x) => x !== t) : [...(d.assessmentTypes ?? []), t],
+      assessmentTypes: {
+        assessment1: d.assessmentTypes?.assessment1 ?? "written",
+        assessment2: on ? (d.assessmentTypes?.assessment2 ?? nextAssessmentType(d.assessmentTypes?.assessment1)) : undefined,
+      },
     }));
+  const setAssessment2 = (t: AssessmentKind) =>
+    setCriteriaDraft((d) => ({ ...d, assessmentTypes: { assessment1: d.assessmentTypes?.assessment1 ?? "written", assessment2: t } }));
   const addQuestion = () => {
     if (!qText.trim()) return;
     if (qKind === "number" && qMin === "" && qMax === "") return;
@@ -602,7 +617,7 @@ export function JobsTab({ jobs, applications, isExpired, addJob, updateJob, dele
                 <Field label="Reports to"><input className={fi} value={editing.reportsTo ?? ""} onChange={(e) => setEditing({ ...editing, reportsTo: e.target.value })} placeholder="e.g. Director, Air Traffic Management" /></Field>
                 <Field label="Number of vacancies"><input type="number" min={1} className={fi} value={editing.vacancies ?? 1} onChange={(e) => setEditing({ ...editing, vacancies: parseInt(e.target.value) || 1 })} /></Field>
                 <Field label="Employment Category"><select className={fi} value={editing.type} onChange={(e) => setEditing({ ...editing, type: e.target.value as any })}>{EMPLOYMENT_TYPES.map((t) => <option key={t}>{t}</option>)}</select></Field>
-                <Field label="Sourcing Type"><select className={fi} value={editing.visibility} onChange={(e) => setEditing({ ...editing, visibility: e.target.value as Visibility })}><option value="external">External — open to public</option><option value="internal">Internal — CAA staff only</option></select></Field>
+                <Field label="Sourcing Type"><select className={fi} value={editing.visibility} onChange={(e) => setEditing({ ...editing, visibility: e.target.value as Visibility })}><option value="external">External — open to public</option><option value="internal">Internal — UCAA staff only</option></select></Field>
                 <Field label="Salary range (admins only — not shown to candidates)"><input className={fi} value={editing.salary} onChange={(e) => setEditing({ ...editing, salary: e.target.value })} placeholder="e.g. UGX 3.2M–5.8M" /></Field>
                 <Field label="Salary Scale"><select className={fi} value={editing.salaryBand} onChange={(e) => setEditing({ ...editing, salaryBand: e.target.value })}>{SALARY_BANDS.map((b) => <option key={b}>{b}</option>)}</select></Field>
                 <Field label="Deadline"><input type="date" className={fi} value={editing.closesAt} onChange={(e) => setEditing({ ...editing, closesAt: e.target.value })} /></Field>
@@ -708,15 +723,22 @@ export function JobsTab({ jobs, applications, isExpired, addJob, updateJob, dele
                   {QUAL_LEVELS.map((q) => <option key={q} value={q}>{q}</option>)}
                 </select>
               </Field>
-              <div>
-                <label className="block text-xs font-medium text-caa-body mb-1">Assessment type</label>
-                <div className="flex flex-wrap gap-3">
-                  {ASSESSMENT_TYPES.map((t) => (
-                    <label key={t} className="inline-flex items-center gap-1.5 text-xs text-caa-body cursor-pointer">
-                      <input type="checkbox" checked={(criteriaDraft.assessmentTypes ?? []).includes(t)} onChange={() => toggleAssessmentType(t)} />
-                      {t}
-                    </label>
-                  ))}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Field label="Assessment 1 (compulsory for every candidate)">
+                  <select className={fi} value={criteriaDraft.assessmentTypes?.assessment1 ?? "written"} onChange={(e) => setAssessment1(e.target.value as AssessmentKind)}>
+                    {ASSESSMENT_KIND_LIST.map((t) => <option key={t} value={t}>{ASSESSMENT_KIND_LABELS[t]}</option>)}
+                  </select>
+                </Field>
+                <div>
+                  <label className="inline-flex items-center gap-1.5 text-xs font-medium text-caa-body mb-1 cursor-pointer">
+                    <input type="checkbox" checked={!!criteriaDraft.assessmentTypes?.assessment2} onChange={(e) => setRequiresAssessment2(e.target.checked)} />
+                    This role also requires a second assessment
+                  </label>
+                  {criteriaDraft.assessmentTypes?.assessment2 && (
+                    <select className={fi} value={criteriaDraft.assessmentTypes.assessment2} onChange={(e) => setAssessment2(e.target.value as AssessmentKind)}>
+                      {ASSESSMENT_KIND_LIST.map((t) => <option key={t} value={t}>{ASSESSMENT_KIND_LABELS[t]}</option>)}
+                    </select>
+                  )}
                 </div>
               </div>
               <div>

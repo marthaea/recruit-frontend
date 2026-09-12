@@ -88,7 +88,7 @@ export function ReportsTab({ jobs, applications, audit, actor, cvStore }: any) {
     { title: "Intern CGPA Ranking",          desc: `${internApps.length} intern applications ranked by CGPA`,                      Icon: GraduationCap, action: () => downloadInternsReport(internApps, filteredJobs, actor),
       csv: () => downloadCsv("caa-intern-cgpa-ranking", ["Candidate", "Email", "Role", "CGPA", "University", "Status"],
         [...internApps].sort((a, b) => (b.cgpa ?? 0) - (a.cgpa ?? 0)).map((a) => [a.candidateName ?? "", a.candidateEmail ?? "", a.title, a.cgpa ?? "", a.university ?? "", a.status])) },
-    { title: "Internal Staff Register",      desc: `${filteredStaff.length} CAA staff records`,                                     Icon: Users,         action: () => downloadStaffReport(filteredStaff, actor),
+    { title: "Internal Staff Register",      desc: `${filteredStaff.length} UCAA staff records`,                                     Icon: Users,         action: () => downloadStaffReport(filteredStaff, actor),
       csv: () => downloadCsv("caa-staff-register", ["Emp No", "Full Name", "Department", "Position", "Email", "Joined", "Status"],
         filteredStaff.map((s) => [s.empNo, `${s.firstName} ${s.lastName}`, s.dept, s.position, s.email, s.joined, s.status])) },
     { title: "Audit Log",                    desc: `${audit.length} recorded admin actions`,                                       Icon: ClipboardList, action: () => downloadAuditLog(audit, actor),

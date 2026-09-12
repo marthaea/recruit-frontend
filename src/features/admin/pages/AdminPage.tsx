@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, Link, useSearch } from "@tanstack/react-router";
 import {
   Users, Briefcase, LayoutDashboard, FileText, GraduationCap, Download,
@@ -20,11 +20,25 @@ import { InternsTab } from "@/features/admin/components/InternsTab";
 import { StaffTab } from "@/features/admin/components/StaffTab";
 import { ReportsTab } from "@/features/admin/components/ReportsTab";
 import { AuditTab } from "@/features/admin/components/AuditTab";
+import { ShortlistingReportsTab } from "@/features/admin/components/ShortlistingReportsTab";
+import { InterviewPanelTab } from "@/features/admin/components/InterviewPanelTab";
 import { SettingsTab } from "@/features/admin/components/SettingsTab";
 import { PermissionsTab } from "@/features/admin/components/PermissionsTab";
 import { AdministrationTab } from "@/features/admin/components/AdministrationTab";
 import { AssessmentTab } from "@/features/admin/components/AssessmentTab";
 import { EmailsTab } from "@/features/admin/components/EmailsTab";
+import { useOnboardingTour, OnboardingPrompt, OnboardingSpotlight, type TourDef } from "@/features/onboarding/OnboardingTour";
+
+const ADMIN_TOUR: TourDef = {
+  key: "admin",
+  welcomeTitle: "Welcome to the HR Console",
+  welcomeBody: "Want a quick orientation? We'll point out where the dashboard, the sidebar sections, and pending actions live — takes less than a minute.",
+  steps: [
+    { target: '[data-tour="admin-stats"]', title: "Your dashboard at a glance", body: "Key numbers for the whole recruitment pipeline — click any card to jump straight to that section." },
+    { target: '[data-tour="nav-sidebar"]', title: "Everything lives in the sidebar", body: "Recruitment, People & Insights, System, and Administration are grouped here — you'll only see the sections your role has access to." },
+    { target: '[data-tour="pending-actions"]', title: "Don't miss what needs attention", body: "New applications, candidates awaiting interview, and vacancies closing soon all surface right here." },
+  ],
+};
 
 // ─── RBAC-aware nav, grouped into sidebar sections ────────────────────────────
 
@@ -39,10 +53,17 @@ const ALL_NAV = [
   { key: "assessment-schedule", label: "Assessment Schedule", Icon: CalendarClock, perm: "canScheduleAssessment" as const, group: "Recruitment" },
   { key: "candidate-assessment", label: "Candidate Assessment", Icon: ClipboardCheck, perm: "canRecordAssessment" as const, group: "Recruitment" },
   { key: "shortlisting-ii",  label: "Shortlisting II",  Icon: ListChecks,       perm: "canShortlist" as const,           group: "Recruitment" },
+  // Visible to whoever runs shortlisting OR whoever's role exists to audit it —
+  // a single-permission gate would exclude one of those two groups, so this
+  // entry's perm is a "|"-separated list of alternatives (see hasAnyPerm below).
+  { key: "shortlisting-reports", label: "Shortlisting Reports", Icon: ClipboardList, perm: "canShortlist|canViewAudit" as any, group: "Recruitment" },
   { key: "interns",          label: "Interns (CGPA)",   Icon: GraduationCap,    perm: "canViewApplications" as const,    group: "Recruitment" },
   { key: "emails",           label: "Email Log",        Icon: Mail,             perm: "canViewApplications" as const,    group: "Recruitment" },
   { key: "staff",            label: "Internal Staff",   Icon: Users,            perm: "canViewStaff" as const,           group: "People & Insights" },
-  { key: "analytics",        label: "Site Analytics",   Icon: Activity,         perm: "canViewAudit" as const,           group: "People & Insights" },
+  // hr_officer/hr/recruiter run recruitment day to day and need site-traffic
+  // visibility, not just auditors — same "|"-separated pattern as Shortlisting
+  // Reports above.
+  { key: "analytics",        label: "Site Analytics",   Icon: Activity,         perm: "canViewAudit|canShortlist" as any, group: "People & Insights" },
   { key: "reports",          label: "Reports & Exports", Icon: Download,        perm: "canExport" as const,              group: "People & Insights" },
   { key: "audit",            label: "Audit Log",        Icon: ClipboardList,    perm: "canViewAudit" as const,           group: "System" },
   { key: "settings",         label: "Settings",         Icon: Settings,         perm: "canManageSettings" as const,      group: "System" },
@@ -61,13 +82,22 @@ export function AdminPage() {
           pushToast, audit, settings, updateSettings, logAction, updateApplicationStatus, bulkUpdateApplicationStatus,
           notifications, criteria,
           permissionOverrides, savePermissionOverride, cvStore,
-          sentEmails, logEmail, bulkLogEmails, clearEmailLog,
-          analyticsEvents } = useApp();
+          sentEmails, logEmail, bulkLogEmails, clearEmailLog } = useApp();
   const { tab = auth.accountType === "admin" ? "dashboard" : "login", jobId } = useSearch({
     from: "/admin",
   });
   const navigate = useNavigate();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  // Hooks must run before the early returns below (sessionRestoring / not-an-admin) —
+  // the tour itself only ever activates once auth.accountType is really "admin".
+  const tour = useOnboardingTour(ADMIN_TOUR, auth.accountType === "admin" ? auth.email : null);
+  // On mobile the sidebar is a closed-by-default drawer — a tour step
+  // spotlighting it would otherwise target an element sitting off-screen
+  // at translateX(-100%). Force it open for the whole tour; desktop already
+  // shows the sidebar unconditionally so this is a no-op there.
+  useEffect(() => {
+    if (tour.stage === "touring") setMobileNavOpen(true);
+  }, [tour.stage]);
 
   // A stored session looks logged-in immediately (see AppContext's mount
   // effect) but isn't confirmed against the backend yet. Rendering the real
@@ -106,14 +136,25 @@ export function AdminPage() {
   const go = (t: AdminTab) => { navigate({ to: "/admin", search: { tab: t } }); setMobileNavOpen(false); };
   const actor = `${auth.firstName} ${auth.lastName}`;
 
+  // A nav entry's perm can be a single key, or "|"-separated alternatives
+  // (any one grants access) — used by Shortlisting Reports, which two
+  // otherwise-disjoint role groups both need to reach.
+  const hasAnyPerm = (permKey: string) => permKey.split("|").some((p) => canAccess(role, p as any, perms));
   const visibleNav = ALL_NAV.filter(({ perm }) =>
-    perm === null || canAccess(role, perm, perms)
+    perm === null || hasAnyPerm(perm as string)
   );
 
   const unreadCount = notifications.filter((n) => n.recipientEmail === auth.email && !n.read).length;
 
   const pendingApps     = applications.filter((a: Application) => a.status === "Pending").length;
   const awaitingInterview = applications.filter((a: Application) => a.status === "Shortlisted").length;
+  // Live counts surfaced as small badges on a couple of nav items — same
+  // numbers already computed for the pending-actions panel below, just
+  // exposed at the point of navigation too.
+  const navBadges: Partial<Record<AdminTab, number>> = {
+    apps: pendingApps,
+    shortlisting: awaitingInterview,
+  };
   const closingSoon     = jobs.filter((j: Job) => {
     if (isExpired(j)) return false;
     const diff = (new Date(j.closesAt).getTime() - Date.now()) / 86_400_000;
@@ -125,38 +166,56 @@ export function AdminPage() {
 
   const sidebarNav = (
     <>
-      <div className="px-4 py-5 border-b border-white/10 flex items-start justify-between gap-2">
-        <div>
+      <div className="px-4 py-5 border-b border-white/10">
+        <div className="flex items-start justify-between gap-2">
           <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/50">HR Console</p>
-          <p className="text-sm font-semibold text-white mt-0.5">{auth.firstName} {auth.lastName}</p>
-          <span className={`mt-1 inline-block text-[10px] px-2 py-0.5 rounded-full font-semibold ${
-            role === "super" ? "bg-yellow-400/20 text-yellow-300" :
-            role === "hr" ? "bg-blue-400/20 text-blue-300" :
-            "bg-green-400/20 text-green-300"
-          }`}>{ADMIN_ROLE_LABELS[role]}</span>
+          <button onClick={() => setMobileNavOpen(false)} className="md:hidden text-white/60 hover:text-white shrink-0 p-1 -mt-1 -mr-1" aria-label="Close menu">
+            <X className="h-5 w-5" />
+          </button>
         </div>
-        <button onClick={() => setMobileNavOpen(false)} className="md:hidden text-white/60 hover:text-white shrink-0 p-1" aria-label="Close menu">
-          <X className="h-5 w-5" />
-        </button>
+        <div className="flex items-center gap-3 mt-2.5">
+          {auth.photoUrl ? (
+            <img src={auth.photoUrl} alt="" className="h-10 w-10 rounded-xl object-cover border border-white/15 shrink-0" />
+          ) : (
+            <div className="h-10 w-10 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center shrink-0">
+              <span className="text-white font-bold text-xs select-none">{auth.firstName?.[0]}{auth.lastName?.[0]}</span>
+            </div>
+          )}
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-white truncate">{auth.firstName} {auth.lastName}</p>
+            <span className={`mt-0.5 inline-block text-[10px] px-2 py-0.5 rounded-full font-semibold ${
+              role === "super" ? "bg-yellow-400/20 text-yellow-300" :
+              role === "hr" ? "bg-blue-400/20 text-blue-300" :
+              "bg-green-400/20 text-green-300"
+            }`}>{ADMIN_ROLE_LABELS[role]}</span>
+          </div>
+        </div>
       </div>
-      <nav className="flex-1 py-2 overflow-y-auto">
+      <nav data-tour="nav-sidebar" className="flex-1 py-3 overflow-y-auto">
         {NAV_GROUPS.map((group) => {
           const items = visibleNav.filter((n) => n.group === group);
           if (items.length === 0) return null;
           return (
-            <div key={group} className="mb-1">
+            <div key={group} className="mb-1 px-2">
               {group !== "Overview" && (
-                <p className="px-4 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-white/35">{group}</p>
+                <p className="px-2 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-white/35">{group}</p>
               )}
               {items.map(({ key, label, Icon }) => {
                 const active = tab === key;
+                const badge = navBadges[key];
                 return (
                   <button key={key} onClick={() => go(key)}
-                    className={`w-full flex items-center gap-3 px-4 py-2.5 text-[13px] font-medium transition-colors text-left ${
-                      active ? "bg-white/15 text-white border-l-2 border-caa-gold" : "text-white/65 hover:bg-white/8 hover:text-white border-l-2 border-transparent"
+                    className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-colors text-left mb-0.5 ${
+                      active ? "bg-white/15 text-white shadow-sm" : "text-white/65 hover:bg-white/8 hover:text-white"
                     }`}
                   >
-                    <Icon className="h-4 w-4 shrink-0" /> {label}
+                    <Icon className="h-4 w-4 shrink-0" />
+                    <span className="flex-1 truncate">{label}</span>
+                    {!!badge && (
+                      <span className={`text-[10px] font-bold rounded-full px-1.5 py-0.5 leading-none shrink-0 ${active ? "bg-white/25 text-white" : "bg-white/10 text-white/70"}`}>
+                        {badge}
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -165,7 +224,7 @@ export function AdminPage() {
         })}
       </nav>
       {actionCount > 0 && (
-        <button onClick={() => go("dashboard")} className="mx-3 mb-3 w-[calc(100%-24px)] text-left px-3 py-2.5 bg-caa-warning/15 border border-caa-warning/30 rounded-lg hover:bg-caa-warning/20 transition-colors">
+        <button data-tour="pending-actions" onClick={() => go("dashboard")} className="mx-3 mb-3 w-[calc(100%-24px)] text-left px-3 py-2.5 bg-caa-warning/15 border border-caa-warning/30 rounded-xl hover:bg-caa-warning/20 transition-colors">
           <div className="flex items-center gap-2 mb-1.5">
             <Bell className="h-3.5 w-3.5 text-caa-warning shrink-0" />
             <span className="text-[11px] text-caa-warning font-semibold">{actionCount} pending action{actionCount !== 1 ? "s" : ""}</span>
@@ -176,7 +235,10 @@ export function AdminPage() {
           {unreadCount > 0       && <p className="text-[10px] text-white/55 pl-5 leading-5">· {unreadCount} unread alert{unreadCount !== 1 ? "s" : ""}</p>}
         </button>
       )}
-      <div className="px-4 py-4 border-t border-white/10">
+      <div className="px-4 py-4 border-t border-white/10 space-y-2">
+        <button onClick={() => { go("dashboard"); tour.restart(); }} className="text-white/50 text-[11px] hover:text-white transition-colors flex items-center gap-1.5">
+          Take a tour
+        </button>
         <Link to="/" className="text-white/50 text-[11px] hover:text-white transition-colors flex items-center gap-1.5">
           <ChevronRight className="h-3 w-3 rotate-180" /> Back to portal
         </Link>
@@ -205,20 +267,25 @@ export function AdminPage() {
           </button>
           <p className="text-sm font-semibold truncate">{activeLabel}</p>
         </div>
-        <div className="px-4 sm:px-6 py-4 sm:py-6 max-w-5xl">
-          {tab === "dashboard"   && <DashboardTab jobs={jobs} applications={applications} isExpired={isExpired} navigate={navigate} role={role} settings={settings} />}
+        {/* Previously max-w-5xl with no mx-auto — on a wide monitor this hugged
+            the sidebar's left edge and left a large uncentered void on the
+            right, which reads as a real layout defect for data-dense views
+            (tables, the Kanban board) rather than intentional whitespace. */}
+        <div className="px-4 sm:px-6 py-4 sm:py-6 max-w-[1600px] mx-auto">
+          {tab === "dashboard"   && <DashboardTab jobs={jobs} applications={applications} isExpired={isExpired} navigate={navigate} role={role} settings={settings} auth={auth} />}
           {tab === "jobs"        && canAccess(role, "canManageJobs", perms) && <JobsTab jobs={jobs} applications={applications} isExpired={isExpired} addJob={addJob} updateJob={updateJob} deleteJob={deleteJob} onViewApps={(id: number) => navigate({ to: "/admin", search: { tab: "apps", jobId: id } })} viewMode="create" />}
           {tab === "review-jobs" && canAccess(role, "canReviewJob", perms) && <JobsTab jobs={jobs} applications={applications} isExpired={isExpired} onViewApps={(id: number) => navigate({ to: "/admin", search: { tab: "apps", jobId: id } })} viewMode="review" />}
           {tab === "approve-jobs" && canAccess(role, "canApproveJob", perms) && <JobsTab jobs={jobs} applications={applications} isExpired={isExpired} onViewApps={(id: number) => navigate({ to: "/admin", search: { tab: "apps", jobId: id } })} viewMode="approve" />}
-          {tab === "apps"        && canAccess(role, "canViewApplications", perms) && <AppsTab jobs={jobs} applications={applications} jobId={jobId} cvStore={cvStore} updateStatus={updateApplicationStatus} bulkUpdateStatus={bulkUpdateApplicationStatus} logAction={logAction} actor={actor} criteria={criteria} role={role} perms={perms} logEmail={logEmail} bulkLogEmails={bulkLogEmails} onSelectJob={(id: number) => navigate({ to: "/admin", search: { tab: "apps", jobId: id } })} onClearJob={() => navigate({ to: "/admin", search: { tab: "apps" } })} />}
-          {tab === "shortlisting" && canAccess(role, "canShortlist", perms) && <AppsTab jobs={jobs} applications={applications} jobId={jobId} cvStore={cvStore} updateStatus={updateApplicationStatus} bulkUpdateStatus={bulkUpdateApplicationStatus} logAction={logAction} actor={actor} criteria={criteria} role={role} perms={perms} logEmail={logEmail} bulkLogEmails={bulkLogEmails} initialStatusFilter="Shortlisted" />}
-          {tab === "interview-panel" && canAccess(role, "canShortlist", perms) && <AppsTab jobs={jobs} applications={applications} jobId={jobId} cvStore={cvStore} updateStatus={updateApplicationStatus} bulkUpdateStatus={bulkUpdateApplicationStatus} logAction={logAction} actor={actor} criteria={criteria} role={role} perms={perms} logEmail={logEmail} bulkLogEmails={bulkLogEmails} initialStatusFilter="Interview" />}
-          {tab === "assessment-schedule" && canAccess(role, "canScheduleAssessment", perms) && <AssessmentTab jobs={jobs} applications={applications} mode="schedule" />}
-          {tab === "candidate-assessment" && canAccess(role, "canRecordAssessment", perms) && <AssessmentTab jobs={jobs} applications={applications} mode="record" />}
-          {tab === "shortlisting-ii" && canAccess(role, "canShortlist", perms) && <CandidateScoringPanel jobs={jobs} applications={applications} jobId={jobId} cvStore={cvStore} actor={actor} bulkUpdateStatus={bulkUpdateApplicationStatus} logAction={logAction} onSelectJob={(id: number) => navigate({ to: "/admin", search: { tab: "shortlisting-ii", jobId: id } })} onClearJob={() => navigate({ to: "/admin", search: { tab: "shortlisting-ii" } })} />}
+          {tab === "apps"        && canAccess(role, "canViewApplications", perms) && <AppsTab jobs={jobs} applications={applications} jobId={jobId} cvStore={cvStore} updateStatus={updateApplicationStatus} bulkUpdateStatus={bulkUpdateApplicationStatus} logAction={logAction} actor={actor} criteria={criteria} role={role} perms={perms} logEmail={logEmail} bulkLogEmails={bulkLogEmails} mode="list" onSelectJob={(id: number) => navigate({ to: "/admin", search: { tab: "apps", jobId: id } })} onClearJob={() => navigate({ to: "/admin", search: { tab: "apps" } })} />}
+          {tab === "shortlisting" && canAccess(role, "canShortlist", perms) && <AppsTab jobs={jobs} applications={applications} jobId={jobId} cvStore={cvStore} updateStatus={updateApplicationStatus} bulkUpdateStatus={bulkUpdateApplicationStatus} logAction={logAction} actor={actor} criteria={criteria} role={role} perms={perms} logEmail={logEmail} bulkLogEmails={bulkLogEmails} mode="shortlist" initialStatusFilter="Shortlisted" />}
+          {tab === "interview-panel" && canAccess(role, "canShortlist", perms) && <InterviewPanelTab jobs={jobs} />}
+          {tab === "assessment-schedule" && canAccess(role, "canScheduleAssessment", perms) && <AssessmentTab jobs={jobs} applications={applications} criteria={criteria} mode="schedule" />}
+          {tab === "candidate-assessment" && canAccess(role, "canRecordAssessment", perms) && <AssessmentTab jobs={jobs} applications={applications} criteria={criteria} mode="record" />}
+          {tab === "shortlisting-ii" && canAccess(role, "canShortlist", perms) && <CandidateScoringPanel jobs={jobs} applications={applications} jobId={jobId} cvStore={cvStore} actor={actor} criteria={criteria} bulkUpdateStatus={bulkUpdateApplicationStatus} logAction={logAction} onSelectJob={(id: number) => navigate({ to: "/admin", search: { tab: "shortlisting-ii", jobId: id } })} onClearJob={() => navigate({ to: "/admin", search: { tab: "shortlisting-ii" } })} />}
+          {tab === "shortlisting-reports" && hasAnyPerm("canShortlist|canViewAudit") && <ShortlistingReportsTab />}
           {tab === "emails"      && canAccess(role, "canViewApplications", perms) && <EmailsTab sentEmails={sentEmails} clearEmailLog={clearEmailLog} />}
-          {tab === "interns"     && canAccess(role, "canViewApplications", perms) && <InternsTab applications={applications} jobs={jobs} criteria={criteria} actor={actor} updateStatus={updateApplicationStatus} bulkUpdateStatus={bulkUpdateApplicationStatus} canShortlist={canAccess(role, "canShortlist", perms)} logAction={logAction} />}
-          {tab === "analytics"   && canAccess(role, "canViewAudit", perms) && <AnalyticsTab analyticsEvents={analyticsEvents} />}
+          {tab === "interns"     && canAccess(role, "canViewApplications", perms) && <InternsTab applications={applications} jobs={jobs} criteria={criteria} actor={actor} settings={settings} updateStatus={updateApplicationStatus} bulkUpdateStatus={bulkUpdateApplicationStatus} canShortlist={canAccess(role, "canShortlist", perms)} logAction={logAction} />}
+          {tab === "analytics"   && hasAnyPerm("canViewAudit|canShortlist") && <AnalyticsTab />}
           {tab === "staff"       && canAccess(role, "canViewStaff", perms) && <StaffTab actor={actor} logAction={logAction} pushToast={pushToast} />}
           {tab === "reports"     && canAccess(role, "canExport", perms) && <ReportsTab jobs={jobs} applications={applications} audit={audit} actor={actor} cvStore={cvStore} />}
           {tab === "audit"       && canAccess(role, "canViewAudit", perms) && <AuditTab audit={audit} actor={actor} />}
@@ -235,6 +302,9 @@ export function AdminPage() {
           )}
         </div>
       </div>
+
+      {tour.stage === "prompt" && <OnboardingPrompt def={ADMIN_TOUR} onAccept={tour.accept} onSkip={tour.dismiss} />}
+      {tour.stage === "touring" && <OnboardingSpotlight steps={ADMIN_TOUR.steps} onFinish={tour.dismiss} onSkip={tour.dismiss} />}
     </div>
   );
 }

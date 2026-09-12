@@ -4,6 +4,6 @@ import { ApplyPage } from "@/features/applications/pages/ApplyPage";
 
 export const Route = createFileRoute("/apply")({
   validateSearch: z.object({ jobId: z.coerce.number().optional() }),
-  head: () => ({ meta: [{ title: "Apply — CAA Uganda" }] }),
+  head: () => ({ meta: [{ title: "Apply — UCAA" }] }),
   component: ApplyPage,
 });

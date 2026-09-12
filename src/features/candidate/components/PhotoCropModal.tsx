@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useEffect } from "react";
 import { X, Upload, ZoomIn, Check } from "lucide-react";
 import { useModalA11y } from "@/hooks/useModalA11y";
 
@@ -15,7 +15,10 @@ export function PhotoCropModal({ open, currentPhoto, onClose, onSave }: Props) {
   const [imgSrc, setImgSrc]             = useState<string | null>(null);
   const [naturalSize, setNaturalSize]   = useState<{ w: number; h: number } | null>(null);
   const [userScale, setUserScale]       = useState(1);
-  const [offset, setOffset]             = useState({ x: 0, y: 0 });
+  // Pan position as a fraction (-1..1) of the available drag range, not raw
+  // pixels — scale-invariant, so the same visual point in the image stays
+  // under the same screen position when the zoom level changes.
+  const [pan, setPan]                   = useState({ x: 0, y: 0 });
   const [dragging, setDragging]         = useState(false);
   const [lastPos, setLastPos]           = useState({ x: 0, y: 0 });
 
@@ -30,7 +33,7 @@ export function PhotoCropModal({ open, currentPhoto, onClose, onSave }: Props) {
       setImgSrc(null);
       setNaturalSize(null);
       setUserScale(1);
-      setOffset({ x: 0, y: 0 });
+      setPan({ x: 0, y: 0 });
     }
   }, [open]);
 
@@ -39,10 +42,15 @@ export function PhotoCropModal({ open, currentPhoto, onClose, onSave }: Props) {
   const renderedW  = naturalSize ? naturalSize.w * baseScale * userScale : CROP_SIZE;
   const renderedH  = naturalSize ? naturalSize.h * baseScale * userScale : CROP_SIZE;
 
-  const clampOff = useCallback((ox: number, oy: number, rw: number, rh: number) => ({
-    x: Math.min(Math.max(ox, -(rw - CROP_SIZE) / 2), (rw - CROP_SIZE) / 2),
-    y: Math.min(Math.max(oy, -(rh - CROP_SIZE) / 2), (rh - CROP_SIZE) / 2),
-  }), []);
+  // Half of the pixel range the image can pan across at the current zoom —
+  // pan.x/y (-1..1) times this gives the actual pixel offset.
+  const halfRangeX = Math.max((renderedW - CROP_SIZE) / 2, 0);
+  const halfRangeY = Math.max((renderedH - CROP_SIZE) / 2, 0);
+
+  const clampPan = (fx: number, fy: number) => ({
+    x: Math.min(Math.max(fx, -1), 1),
+    y: Math.min(Math.max(fy, -1), 1),
+  });
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -52,7 +60,7 @@ export function PhotoCropModal({ open, currentPhoto, onClose, onSave }: Props) {
     reader.onload = () => {
       setImgSrc(reader.result as string);
       setUserScale(1);
-      setOffset({ x: 0, y: 0 });
+      setPan({ x: 0, y: 0 });
       setNaturalSize(null);
     };
     reader.readAsDataURL(file);
@@ -73,7 +81,10 @@ export function PhotoCropModal({ open, currentPhoto, onClose, onSave }: Props) {
     if (!dragging) return;
     const dx = e.clientX - lastPos.x;
     const dy = e.clientY - lastPos.y;
-    setOffset(prev => clampOff(prev.x + dx, prev.y + dy, renderedW, renderedH));
+    setPan(prev => clampPan(
+      prev.x + (halfRangeX > 0 ? dx / halfRangeX : 0),
+      prev.y + (halfRangeY > 0 ? dy / halfRangeY : 0),
+    ));
     setLastPos({ x: e.clientX, y: e.clientY });
   };
   const onMouseUp = () => setDragging(false);
@@ -88,17 +99,16 @@ export function PhotoCropModal({ open, currentPhoto, onClose, onSave }: Props) {
     if (!dragging || e.touches.length !== 1) return;
     const dx = e.touches[0].clientX - lastPos.x;
     const dy = e.touches[0].clientY - lastPos.y;
-    setOffset(prev => clampOff(prev.x + dx, prev.y + dy, renderedW, renderedH));
+    setPan(prev => clampPan(
+      prev.x + (halfRangeX > 0 ? dx / halfRangeX : 0),
+      prev.y + (halfRangeY > 0 ? dy / halfRangeY : 0),
+    ));
     setLastPos({ x: e.touches[0].clientX, y: e.touches[0].clientY });
   };
 
-  const handleScaleChange = (newScale: number) => {
-    if (!naturalSize) return;
-    const rw = naturalSize.w * baseScale * newScale;
-    const rh = naturalSize.h * baseScale * newScale;
-    setUserScale(newScale);
-    setOffset(prev => clampOff(prev.x, prev.y, rw, rh));
-  };
+  // pan is a fraction of the drag range, so it's already scale-invariant —
+  // changing zoom needs no offset recalculation to keep the framed point fixed.
+  const handleScaleChange = (newScale: number) => setUserScale(newScale);
 
   // ── Canvas crop ─────────────────────────────────────────────────────────────
   const handleSave = () => {
@@ -141,8 +151,15 @@ export function PhotoCropModal({ open, currentPhoto, onClose, onSave }: Props) {
     position: "absolute",
     width: renderedW,
     height: renderedH,
-    left: (CROP_SIZE - renderedW) / 2 + offset.x,
-    top:  (CROP_SIZE - renderedH) / 2 + offset.y,
+    // Tailwind's preflight sets `img { max-width: 100%; height: auto }`,
+    // which silently caps this element below CROP_SIZE-relative sizing at
+    // any zoom that needs the image larger than its container — without
+    // this override the browser renders a smaller box than left/top were
+    // computed for, so the visible crop drifts off the actual image.
+    maxWidth: "none",
+    maxHeight: "none",
+    left: (CROP_SIZE - renderedW) / 2 + pan.x * halfRangeX,
+    top:  (CROP_SIZE - renderedH) / 2 + pan.y * halfRangeY,
     userSelect: "none",
     pointerEvents: "none",
     display: "block",

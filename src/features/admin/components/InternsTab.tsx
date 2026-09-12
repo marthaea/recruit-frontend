@@ -3,19 +3,22 @@ import {
   FileDown, Zap,
 } from "lucide-react";
 import {
-  type Application, type JobCriteria,
+  type Application, type JobCriteria, type AdminSettings,
 } from "@/app/providers/AppContext";
 import {
   downloadInternsReport,
 } from "@/services/documents/pdf-reports";
-import { STATUS_COLORS } from "./shared";
+import { STATUS_COLORS, logScreeningRun } from "./shared";
 
-export function InternsTab({ applications, jobs, criteria, actor, updateStatus, bulkUpdateStatus, canShortlist, logAction }: any) {
+export function InternsTab({ applications, jobs, criteria, actor, settings, updateStatus, bulkUpdateStatus, canShortlist, logAction }: any) {
   const interns = [...applications]
     .filter((a: Application) => a.cgpa !== undefined)
     .sort((a: Application, b: Application) => (b.cgpa ?? 0) - (a.cgpa ?? 0));
 
-  const [cgpaThreshold, setCgpaThreshold] = useState(3.8);
+  // Previously hardcoded to 3.8 with no way for HR to change the org-wide
+  // default — now seeded from Settings → "Default CGPA threshold" and still
+  // freely adjustable per-run from this field, same as before.
+  const [cgpaThreshold, setCgpaThreshold] = useState((settings as AdminSettings | undefined)?.defaultCgpaThreshold ?? 3.8);
   const [screeningPreview, setScreeningPreview] = useState<{ pass: Application[]; fail: Application[] } | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -49,6 +52,22 @@ export function InternsTab({ applications, jobs, criteria, actor, updateStatus, 
         ...screeningPreview.fail.map((a: Application) => ({ id: a.id, status: "Declined" as const })),
       ]);
       logAction(`Auto-screened ${screeningPreview.pass.length + screeningPreview.fail.length} intern(s) — CGPA ≥ ${cgpaThreshold.toFixed(1)}`);
+      logScreeningRun({
+        action: "Ran CGPA auto-screen",
+        threshold: { defaultMinCgpa: cgpaThreshold },
+        candidates: [
+          ...screeningPreview.pass.map((a: Application) => ({
+            id: a.id, name: a.candidateName, email: a.candidateEmail, jobId: a.jobId, jobTitle: a.title,
+            decision: "Shortlisted" as const,
+            reasons: [`CGPA ${a.cgpa?.toFixed(1)} meets minimum ${effectiveThreshold(a).toFixed(1)}`],
+          })),
+          ...screeningPreview.fail.map((a: Application) => ({
+            id: a.id, name: a.candidateName, email: a.candidateEmail, jobId: a.jobId, jobTitle: a.title,
+            decision: "Declined" as const,
+            reasons: [`CGPA ${a.cgpa?.toFixed(1)} below minimum ${effectiveThreshold(a).toFixed(1)}`],
+          })),
+        ],
+      });
       setScreeningPreview(null);
       setIsProcessing(false);
     }, 0);

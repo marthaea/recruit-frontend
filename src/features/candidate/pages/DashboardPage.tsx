@@ -1,11 +1,25 @@
 import { useEffect, useState, useCallback } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Check, Circle, Bell, FileText, Eye, Users, Award, Mail, Pencil, X, UserCog, Download, Camera } from "lucide-react";
-import { useApp, canWithdraw, type Application, type CvProfile } from "@/app/providers/AppContext";
+import { useApp, canWithdraw, canEditApplication, type Application, type CvProfile } from "@/app/providers/AppContext";
 import { downloadApplicationSummary } from "@/services/documents/pdf-reports";
 import { PhotoCropModal } from "@/features/candidate/components/PhotoCropModal";
+import { CvSectionModal, type CvSection } from "@/features/candidate/components/CvSectionModal";
 import { cv as cvApi, applications as appsApi } from "@/services/api/client";
 import { computeCvChecklist, computeCvCompletion } from "@/features/candidate/utils/cv-completion";
+import { useOnboardingTour, OnboardingPrompt, OnboardingSpotlight, type TourDef } from "@/features/onboarding/OnboardingTour";
+
+const CANDIDATE_TOUR: TourDef = {
+  key: "candidate",
+  welcomeTitle: "Welcome to your dashboard",
+  welcomeBody: "Want a quick look around? It only takes a minute and shows you where everything lives — your applications, your profile, and how to apply for a role.",
+  steps: [
+    { target: '[data-tour="browse-vacancies"]', title: "Browse open roles", body: "Head here anytime to see every open vacancy at UCAA and apply directly." },
+    { target: '[data-tour="applications"]', title: "Track your applications", body: "Every application you submit shows up here with its live status — Pending, Shortlisted, Interview, and so on. You can edit or withdraw while it's still early in the process." },
+    { target: '[data-tour="profile-completion"]', title: "Keep your profile complete", body: "A complete profile is reused automatically on every application. Click any unchecked item here to fill it in — it only takes a moment." },
+    { target: '[data-tour="stats"]', title: "Your numbers at a glance", body: "See how many applications you've submitted, how many were shortlisted, and how many offers you've received." },
+  ],
+};
 
 const STATUS: Record<Application["status"], string> = {
   Shortlisted:    "bg-caa-success/10 text-caa-success",
@@ -91,6 +105,7 @@ function useLiveTime() {
 
 export function DashboardPage() {
   const { auth, sessionRestoring, applications, jobs, withdrawApplication, updateProfile, updatePhotoUrl, pushToast, notifications, markNotificationRead } = useApp();
+  const tour = useOnboardingTour(CANDIDATE_TOUR, auth.email || null);
   const [liveApps, setLiveApps] = useState<Application[] | null>(null);
   const navigate = useNavigate();
   const now = useLiveTime();
@@ -123,12 +138,27 @@ export function DashboardPage() {
 
   // Load the CV profile to compute real completeness
   const [cvProfile, setCvProfile] = useState<Record<string, unknown> | null>(null);
-  useEffect(() => {
-    if (sessionRestoring || !auth.isLoggedIn) return;
+  const refreshCvProfile = useCallback(() => {
     cvApi.get().then((r) => {
       if (r.success && r.data) setCvProfile(r.data as unknown as Record<string, unknown>);
     }).catch(() => {});
-  }, [auth.isLoggedIn, sessionRestoring]);
+  }, []);
+  useEffect(() => {
+    if (sessionRestoring || !auth.isLoggedIn) return;
+    refreshCvProfile();
+  }, [auth.isLoggedIn, sessionRestoring, refreshCvProfile]);
+
+  // Which Profile Completion checklist item is currently being edited, if any
+  const [editSection, setEditSection] = useState<CvSection | null>(null);
+  const CHECKLIST_SECTIONS: Record<string, CvSection | "photo"> = {
+    "Personal information": "personal",
+    "Contact details": "contact",
+    "Profile photo": "photo",
+    "Education history": "qualifications",
+    "Work experience": "experience",
+    "Skills": "skills",
+    "Referee contacts": "referees",
+  };
 
   // Greeting + time
   const hour = now.getHours();
@@ -161,6 +191,10 @@ export function DashboardPage() {
   );
 
   const handleEdit = (a: Application) => {
+    if (!canEditApplication(a.status)) {
+      pushToast({ type: "warning", title: "This application can no longer be edited", message: `It has already progressed to ${a.status}. Contact HR if you need to make a change.` });
+      return;
+    }
     if (a.completion < 100) {
       navigate({ to: "/apply", search: { jobId: a.jobId ?? 1 } });
       pushToast({ type: "info", title: "Continue editing", message: `Resuming your ${a.title} application` });
@@ -192,7 +226,7 @@ export function DashboardPage() {
   return (
     <>
       <div className="caa-hero-bg py-10 px-4 sm:px-6">
-        <div className="relative mx-auto max-w-6xl flex flex-wrap items-center justify-between gap-4">
+        <div className="relative mx-auto max-w-7xl flex flex-wrap items-center justify-between gap-4">
           {/* Left: avatar + greeting */}
           <div className="flex items-center gap-4">
             {/* Profile photo — click to change */}
@@ -234,9 +268,16 @@ export function DashboardPage() {
 
           {/* Right: action buttons */}
           <div className="flex gap-3">
-            <Link to="/vacancies" className="px-4 py-2.5 text-sm border border-white/30 text-white rounded-md hover:bg-white/10 transition-colors">
+            <Link to="/vacancies" data-tour="browse-vacancies" className="px-4 py-2.5 text-sm border border-white/30 text-white rounded-md hover:bg-white/10 transition-colors">
               Browse Vacancies
             </Link>
+            <button
+              onClick={tour.restart}
+              title="Take a tour of your dashboard"
+              className="px-4 py-2.5 text-sm border border-white/30 text-white rounded-md hover:bg-white/10 transition-colors"
+            >
+              Take a tour
+            </button>
             <button
               onClick={() => setEditProfile(true)}
               className="px-4 py-2.5 text-sm bg-white text-caa-navy font-semibold rounded-md hover:bg-caa-surface transition-colors inline-flex items-center gap-2"
@@ -248,7 +289,7 @@ export function DashboardPage() {
       </div>
 
       <div className="px-4 sm:px-6 mt-8 pb-10">
-        <div className="mx-auto max-w-6xl grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <div className="mx-auto max-w-7xl grid grid-cols-1 lg:grid-cols-3 gap-5">
           {/* Left col */}
           <div className="lg:col-span-2 space-y-5">
             {/* In-app notifications */}
@@ -256,7 +297,7 @@ export function DashboardPage() {
               <div className="caa-card p-0 overflow-hidden">
                 <div className="flex items-center gap-2 px-4 py-3 border-b border-caa-border bg-caa-navy/4">
                   <Bell className="h-4 w-4 text-caa-navy" />
-                  <h3 className="font-semibold text-sm text-caa-body">Notifications from CAA HR</h3>
+                  <h3 className="font-semibold text-sm text-caa-body">Notifications from UCAA HR</h3>
                   <span className="ml-auto text-[11px] text-caa-muted">{notifications.filter((n) => n.recipientEmail === auth.email?.toLowerCase() && !n.read).length} unread</span>
                 </div>
                 <div className="divide-y divide-caa-border">
@@ -291,7 +332,7 @@ export function DashboardPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+            <div data-tour="stats" className="grid grid-cols-1 sm:grid-cols-3 gap-5">
               {[
                 { l: "Applications Submitted", n: myApplications.length, color: "text-caa-navy" },
                 { l: "Shortlisted", n: myApplications.filter((a) => a.status === "Shortlisted").length, color: "text-caa-navy-2" },
@@ -304,7 +345,7 @@ export function DashboardPage() {
               ))}
             </div>
 
-            <div className="caa-card p-0 overflow-hidden">
+            <div data-tour="applications" className="caa-card p-0 overflow-hidden">
               <div className="flex items-center justify-between px-5 py-4 border-b border-caa-border">
                 <h3 className="font-bold text-lg text-caa-body">My Applications</h3>
                 <span className="text-xs text-caa-muted">Edit or withdraw any active application</span>
@@ -343,12 +384,21 @@ export function DashboardPage() {
                       {a.status}
                     </span>
                       <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => handleEdit(a)}
-                          className="px-2.5 py-1.5 text-xs border border-caa-border text-caa-navy rounded-md hover:border-caa-navy hover:bg-caa-surface inline-flex items-center gap-1"
-                        >
-                          <Pencil className="h-3 w-3" /> Edit
-                        </button>
+                        {canEditApplication(a.status) ? (
+                          <button
+                            onClick={() => handleEdit(a)}
+                            className="px-2.5 py-1.5 text-xs border border-caa-border text-caa-navy rounded-md hover:border-caa-navy hover:bg-caa-surface inline-flex items-center gap-1"
+                          >
+                            <Pencil className="h-3 w-3" /> Edit
+                          </button>
+                        ) : (
+                          <span
+                            className="px-2.5 py-1.5 text-xs border border-caa-border text-caa-muted/70 rounded-md inline-flex items-center gap-1 cursor-not-allowed"
+                            title="Applications can no longer be edited once shortlisted"
+                          >
+                            <Pencil className="h-3 w-3" /> Edit
+                          </span>
+                        )}
                         <button
                           onClick={() => {
                             const job = jobs.find((j) => j.id === a.jobId);
@@ -385,7 +435,7 @@ export function DashboardPage() {
 
           {/* Right col */}
           <div className="space-y-5">
-            <div className="caa-card p-5">
+            <div data-tour="profile-completion" className="caa-card p-5">
               <h3 className="font-bold text-base text-caa-body">Profile Completion</h3>
               <div className="mt-3 h-2 bg-caa-surface rounded-full overflow-hidden">
                 <div
@@ -405,15 +455,24 @@ export function DashboardPage() {
               )}
               <ul className="mt-4 space-y-2">
                 {checklist.map((c) => (
-                  <li key={c.label} className="flex items-center gap-2 text-sm">
-                    {c.done ? (
-                      <span className="h-5 w-5 rounded-full bg-caa-success flex items-center justify-center">
-                        <Check className="h-3 w-3 text-white" strokeWidth={3} />
-                      </span>
-                    ) : (
-                      <Circle className="h-5 w-5 text-caa-light" />
-                    )}
-                    <span className={c.done ? "text-caa-body" : "text-caa-muted"}>{c.label}</span>
+                  <li key={c.label}>
+                    <button
+                      onClick={() => {
+                        const target = CHECKLIST_SECTIONS[c.label];
+                        if (target === "photo") setPhotoModalOpen(true);
+                        else if (target) setEditSection(target);
+                      }}
+                      className="w-full flex items-center gap-2 text-sm text-left hover:bg-caa-surface rounded-md px-1 py-0.5 -mx-1 transition-colors"
+                    >
+                      {c.done ? (
+                        <span className="h-5 w-5 rounded-full bg-caa-success flex items-center justify-center shrink-0">
+                          <Check className="h-3 w-3 text-white" strokeWidth={3} />
+                        </span>
+                      ) : (
+                        <Circle className="h-5 w-5 text-caa-light shrink-0" />
+                      )}
+                      <span className={c.done ? "text-caa-body" : "text-caa-muted"}>{c.label}</span>
+                    </button>
                   </li>
                 ))}
               </ul>
@@ -424,34 +483,59 @@ export function DashboardPage() {
                 <Bell className="h-4 w-4 text-caa-navy" />
                 <h3 className="font-bold text-base text-caa-body">Notifications</h3>
               </div>
-              <div className="mt-3 space-y-3">
-                <div className="border-l-2 border-caa-success pl-3 py-1">
-                  <p className="text-sm font-medium text-caa-body">Shortlist confirmed</p>
-                  <p className="text-xs text-caa-muted mt-0.5">Your application for Senior ATC has been shortlisted. Interview dates to follow.</p>
-                </div>
-                <div className="border-l-2 border-caa-navy-2 pl-3 py-1">
-                  <p className="text-sm font-medium text-caa-body">Application received</p>
-                  <p className="text-xs text-caa-muted mt-0.5">Finance Officer application successfully submitted.</p>
-                </div>
-              </div>
+              {(() => {
+                const myNotifs = notifications.filter((n) => n.recipientEmail === auth.email?.toLowerCase());
+                if (myNotifs.length === 0) {
+                  return <p className="text-sm text-caa-muted mt-3">No notifications at this time.</p>;
+                }
+                return (
+                  <div className="mt-3 space-y-3">
+                    {myNotifs.slice(0, 5).map((n) => (
+                      <div key={n.id} className={`border-l-2 pl-3 py-1 ${n.read ? "border-caa-border" : "border-caa-navy-2"}`}>
+                        <p className="text-sm font-medium text-caa-body">{n.title}</p>
+                        <p className="text-xs text-caa-muted mt-0.5">{n.message}</p>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
 
             <div className="caa-card p-5">
               <h3 className="font-bold text-base text-caa-body">Application Timeline</h3>
-              <ol className="mt-4 relative border-l border-caa-border ml-2 space-y-5">
-                {[
-                  { icon: <FileText className="h-3.5 w-3.5" />, label: "Submitted", date: "Jun 3, 2026", done: true, color: "bg-caa-success" },
-                  { icon: <Eye className="h-3.5 w-3.5" />, label: "Under Review", date: "Jun 5, 2026", done: true, color: "bg-caa-navy-2" },
-                  { icon: <Users className="h-3.5 w-3.5" />, label: "Shortlisted", date: "Jun 10, 2026", done: true, color: "bg-caa-navy" },
-                  { icon: <Award className="h-3.5 w-3.5" />, label: "Interview", date: "Pending", done: false, color: "bg-caa-light" },
-                ].map((s, i) => (
-                  <li key={i} className="ml-4">
-                    <span className={`absolute -left-[11px] h-5 w-5 rounded-full ${s.color} text-white flex items-center justify-center`}>{s.icon}</span>
-                    <p className={`text-sm font-medium ${s.done ? "text-caa-body" : "text-caa-muted"}`}>{s.label}</p>
-                    <p className="text-[11px] text-caa-muted">{s.date}</p>
-                  </li>
-                ))}
-              </ol>
+              {myApplications.length === 0 ? (
+                <p className="text-sm text-caa-muted mt-3">
+                  Your application journey will appear here once you apply. <Link to="/vacancies" className="text-caa-navy hover:text-caa-gold underline">Browse vacancies</Link> to get started.
+                </p>
+              ) : (
+                <ol className="mt-4 relative border-l border-caa-border ml-2 space-y-5">
+                  {(() => {
+                    const latest = myApplications[0];
+                    const declined = latest.status === "Declined";
+                    const current = PIPE_INDEX[latest.status] ?? 0;
+                    // Same 5-stage model as AppPipeline above — only the submission
+                    // date is on record, so later stages show "Pending" until reached.
+                    const icons = [
+                      <FileText key="a" className="h-3.5 w-3.5" />,
+                      <Users key="s" className="h-3.5 w-3.5" />,
+                      <Eye key="i" className="h-3.5 w-3.5" />,
+                      <Award key="as" className="h-3.5 w-3.5" />,
+                      <Check key="o" className="h-3.5 w-3.5" />,
+                    ];
+                    return PIPE_STEPS.map((label, i) => {
+                      const done = !declined && i < current;
+                      const active = !declined && i === current;
+                      return (
+                        <li key={label} className="ml-4">
+                          <span className={`absolute -left-[11px] h-5 w-5 rounded-full text-white flex items-center justify-center ${declined ? "bg-caa-border" : done ? "bg-caa-success" : active ? "bg-caa-navy" : "bg-caa-light"}`}>{icons[i]}</span>
+                          <p className={`text-sm font-medium ${done || active ? "text-caa-body" : "text-caa-muted"}`}>{label}</p>
+                          <p className="text-[11px] text-caa-muted">{i === 0 ? latest.date : done ? "Completed" : active ? "In progress" : "Pending"}</p>
+                        </li>
+                      );
+                    });
+                  })()}
+                </ol>
+              )}
             </div>
           </div>
         </div>
@@ -483,6 +567,13 @@ export function DashboardPage() {
         currentPhoto={auth.photoUrl}
         onClose={() => setPhotoModalOpen(false)}
         onSave={handlePhotoSave}
+      />
+
+      {/* Profile Completion — edit one CV section at a time */}
+      <CvSectionModal
+        section={editSection}
+        onClose={() => setEditSection(null)}
+        onSaved={refreshCvProfile}
       />
 
       {/* Edit profile modal */}
@@ -531,6 +622,9 @@ export function DashboardPage() {
           </div>
         </div>
       )}
+
+      {tour.stage === "prompt" && <OnboardingPrompt def={CANDIDATE_TOUR} onAccept={tour.accept} onSkip={tour.dismiss} />}
+      {tour.stage === "touring" && <OnboardingSpotlight steps={CANDIDATE_TOUR.steps} onFinish={tour.dismiss} onSkip={tour.dismiss} />}
     </>
   );
 }

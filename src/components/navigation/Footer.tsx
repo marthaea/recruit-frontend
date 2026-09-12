@@ -174,18 +174,18 @@ export function Footer() {
             {/* Col 3 — Follow Us */}
             <div>
               <h3 className="text-white font-bold text-sm uppercase tracking-widest mb-5">
-                Follow Uganda CAA
+                Follow UCAA
               </h3>
               {/* Social card styled like the official site's Twitter widget */}
               <div className="bg-white/5 border border-white/10 rounded-lg p-4">
                 <div className="flex items-center gap-3 mb-4">
                   <img
                     src={logo}
-                    alt="Uganda CAA"
+                    alt="UCAA"
                     className="h-10 w-10 rounded-full bg-white object-contain p-1"
                   />
                   <div>
-                    <p className="text-white text-sm font-semibold leading-none">Uganda CAA</p>
+                    <p className="text-white text-sm font-semibold leading-none">UCAA</p>
                     <p className="text-white/50 text-[11px] mt-0.5">@UgandaCAA</p>
                   </div>
                 </div>
@@ -221,7 +221,7 @@ export function Footer() {
                   <div key={i} className="aspect-square overflow-hidden rounded-sm">
                     <img
                       src={src}
-                      alt={`CAA activity ${i + 1}`}
+                      alt={`UCAA activity ${i + 1}`}
                       className="w-full h-full object-cover hover:scale-110 transition-transform duration-500"
                     />
                   </div>
@@ -235,7 +235,7 @@ export function Footer() {
             <p className="text-white/40 text-[11px] leading-relaxed max-w-3xl">
               This portal is provided solely for receiving employment applications for advertised
               vacancies at the Uganda Civil Aviation Authority. Submission does not constitute an
-              offer of employment. CAA Uganda is an equal-opportunity employer and charges no fees
+              offer of employment. UCAA is an equal-opportunity employer and charges no fees
               at any stage of recruitment. Information is handled per the Data Protection and
               Privacy Act.
             </p>
@@ -249,7 +249,7 @@ export function Footer() {
           <div className="flex items-center gap-3">
             <img
               src={logo}
-              alt="CAA Uganda"
+              alt="UCAA"
               className="h-7 w-auto bg-white/10 rounded p-0.5 opacity-80"
             />
             <p className="text-white/60 text-[11px]">

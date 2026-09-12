@@ -248,6 +248,7 @@ export const cv = {
 export const settings = {
   get: () => get<ApiResponse<PortalSettings>>("/settings"),
   update: (data: Partial<PortalSettings>) => put<ApiResponse<PortalSettings>>("/settings", data),
+  emailStatus: () => get<ApiResponse<EmailStatus>>("/settings/email-status"),
 };
 
 // ── Notifications ─────────────────────────────────────────────────────────────
@@ -258,7 +259,9 @@ export const notifications = {
 
 // ── Audit ─────────────────────────────────────────────────────────────────────
 export const audit = {
-  list: (params?: { actor?: string; action?: string; from?: string; to?: string; limit?: number }) => {
+  // Backend only supports `search` (matches actor/action/target) + `limit` —
+  // the previous {actor,action,from,to} params here were silently ignored.
+  list: (params?: { search?: string; limit?: number }) => {
     const qs = params
       ? "?" + new URLSearchParams(
           Object.entries(params).filter(([, v]) => v != null) as [string, string][]
@@ -266,6 +269,8 @@ export const audit = {
       : "";
     return get<ListResponse<AuditEntry>>(`/audit${qs}`);
   },
+  create: (data: { action: string; target?: string; metadata?: unknown }) =>
+    post<ApiResponse<AuditEntry>>("/audit", data),
 };
 
 // ── Emails ────────────────────────────────────────────────────────────────────
@@ -289,7 +294,7 @@ export const analyticsApi = {
 // ── Chatbot (Martha) ──────────────────────────────────────────────────────────
 export const chatbot = {
   /** Fire-and-forget: never blocks or breaks the chat on failure. */
-  logQuery: (data: { query: string; matchedQuestion?: string; outcome: "answered" | "suggested" | "fallback"; persona?: string }) =>
+  logQuery: (data: { query: string; matchedQuestion?: string; outcome: "answered" | "suggested" | "fallback"; persona?: string; confidence?: number }) =>
     post<ApiResponse<{ logged: boolean }>>("/chatbot/queries", data).catch(() => null),
 
   listQueries: (params?: { outcome?: "answered" | "suggested" | "fallback"; days?: number; limit?: number }) => {
@@ -309,6 +314,7 @@ export interface ChatbotQuery {
   outcome: "answered" | "suggested" | "fallback";
   persona: string;
   askedAt: string;
+  confidence: number | null;
 }
 
 // ── Criteria ──────────────────────────────────────────────────────────────────
@@ -429,6 +435,14 @@ export const staff = {
   }) => post<ApiResponse<StaffMember>>("/staff", data),
 };
 
+// ── Interview panel ───────────────────────────────────────────────────────────
+export const interviewPanel = {
+  list: (jobId: number) => get<ListResponse<PanelMember>>(`/interview-panel/${jobId}`),
+  add: (jobId: number, staffId: number) =>
+    post<ApiResponse<PanelMember>>("/interview-panel", { jobId, staffId }),
+  remove: (id: number, jobId: number) => del<ApiResponse<null>>(`/interview-panel/${id}?jobId=${jobId}`),
+};
+
 // ── Response type helpers ─────────────────────────────────────────────────────
 export interface ApiResponse<T> { success: boolean; data: T }
 export interface ListResponse<T> { success: boolean; data: T[]; total: number }
@@ -479,7 +493,18 @@ export interface PortalSettings {
   emailSenderName: string;
   closingSoonDays: number;
   maxApplicationsPerCandidate: number;
-  notifTemplates: { shortlist: string; decline: string; interview: string; offer: string };
+  notifTemplates: {
+    shortlist: string; decline: string; interview: string; offer: string;
+    assessmentScheduled: string; panelInvite: string;
+  };
+  defaultCgpaThreshold: number;
+}
+
+export interface EmailStatus {
+  enabled: boolean;
+  pending: number;
+  failing: number;
+  lastSentAt: string | null;
 }
 
 export interface Notification {
@@ -489,6 +514,7 @@ export interface Notification {
 
 export interface AuditEntry {
   id: number; at: string; actor: string; role: string; action: string; target?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface SentEmail {
@@ -496,10 +522,21 @@ export interface SentEmail {
   body: string; sentAt: string; trigger: string; jobTitle: string;
 }
 
+export interface AnalyticsEventData {
+  id: number; type: "page_view" | "job_view" | "apply_click" | "save_job" | "search";
+  jobId: number | null; jobTitle: string | null; query: string | null;
+  ts: number; sessionId: string | null;
+}
+
+export interface AnalyticsTopJob { jobId: number; jobTitle: string; count: number }
+export interface AnalyticsTopSearch { query: string; count: number }
+export interface AnalyticsDailyCount { date: string; count: number }
+
 export interface AnalyticsSummary {
-  events: unknown[]; summary: Record<string, number>;
-  topJobs: unknown[]; topSearches: unknown[];
-  dailyCounts: { date: string; count: number }[];
+  events: AnalyticsEventData[];
+  summary: { pageViews7: number; jobViews7: number; applyClicks7: number; searches7: number; saveJobs7: number };
+  topJobs: AnalyticsTopJob[]; topSearches: AnalyticsTopSearch[];
+  dailyCounts: AnalyticsDailyCount[];
 }
 
 export interface JobCriteria {
@@ -522,6 +559,13 @@ export interface StaffMember {
   id: number; empNo: string; firstName: string; lastName: string;
   dept: string | null; position: string | null; email: string | null;
   joined: string | null; status: string;
+}
+
+export interface PanelMember {
+  id: number; jobId: number; staffId: number;
+  firstName: string; lastName: string; email: string | null;
+  dept: string | null; position: string | null;
+  invitedByName: string | null; invitedAt: string;
 }
 
 export interface UploadResult {

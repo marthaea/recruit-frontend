@@ -1,17 +1,18 @@
 import { useState, useEffect, useCallback } from "react";
-import { Download, FileDown, Upload, RefreshCw, Zap, FileText } from "lucide-react";
-import { useApp, type Job, type Application } from "@/app/providers/AppContext";
+import { Download, FileDown, Upload, RefreshCw, Zap, FileText, CalendarClock } from "lucide-react";
+import { useApp, type Job, type Application, type JobCriteria } from "@/app/providers/AppContext";
 import { candidateScores as scoresApi, type CandidateScoreSummary } from "@/services/api/client";
 import { downloadCandidateCv } from "@/services/documents/pdf-reports";
 import { downloadCsv } from "@/utils/csv-export";
 import { fi } from "./shared";
+import { AssessmentInviteModal, type InviteCandidate } from "./AssessmentInviteModal";
 
 // Shortlisted II is the CV-scoring stage: multiple admins/panelists each
 // score+comment a candidate independently (candidate_scores table, one row
 // per scorer — unlike the Phase 2b `assessments` table this doesn't
 // overwrite between reviewers), the system averages them, and "Auto-shortlist
 // by score" advances the strongest candidates to Interview.
-export function CandidateScoringPanel({ jobs, applications, jobId, cvStore, actor, bulkUpdateStatus, logAction, onSelectJob, onClearJob }: any) {
+export function CandidateScoringPanel({ jobs, applications, jobId, cvStore, actor, criteria, bulkUpdateStatus, logAction, onSelectJob, onClearJob }: any) {
   const { pushToast, auth, loadCvsForEmails } = useApp();
   const [rows, setRows] = useState<CandidateScoreSummary[]>([]);
   const [loading, setLoading] = useState(false);
@@ -19,6 +20,9 @@ export function CandidateScoringPanel({ jobs, applications, jobId, cvStore, acto
   const [drafts, setDrafts] = useState<Record<number, { score: string; comment: string }>>({});
   const [saving, setSaving] = useState<number | null>(null);
   const [importing, setImporting] = useState(false);
+  // Candidates who just cleared the score threshold, waiting on HR to pick an
+  // assessment type/date before they're actually invited (see runAutoShortlist).
+  const [inviteCandidates, setInviteCandidates] = useState<InviteCandidate[] | null>(null);
 
   const job = jobs.find((j: Job) => j.id === jobId);
 
@@ -89,16 +93,25 @@ export function CandidateScoringPanel({ jobs, applications, jobId, cvStore, acto
   };
 
   const scored = rows.filter((r) => r.average !== null);
+  // Below-threshold candidates are declined immediately (a clear, terminal
+  // outcome). Above-threshold candidates are NOT auto-advanced to "Interview"
+  // — HR picks the assessment type and schedule next, same connecting flow
+  // Shortlist 1 uses; scheduling itself is what actually moves them to
+  // "Assessment Scheduled" and sends the real invite email.
   const runAutoShortlist = () => {
     if (scored.length === 0) return;
     const advance = scored.filter((r) => (r.average ?? 0) >= threshold);
     const decline = scored.filter((r) => (r.average ?? 0) < threshold);
-    bulkUpdateStatus([
-      ...advance.map((r) => ({ id: r.applicationId, status: "Interview" as const })),
-      ...decline.map((r) => ({ id: r.applicationId, status: "Declined" as const })),
-    ]);
-    logAction(`Auto-shortlisted by score (≥${threshold}) — ${advance.length} advanced to Interview, ${decline.length} declined`, job?.title);
-    pushToast({ type: "success", title: "Auto-shortlist applied", message: `${advance.length} advanced, ${decline.length} declined.` });
+    if (decline.length > 0) {
+      bulkUpdateStatus(decline.map((r) => ({ id: r.applicationId, status: "Declined" as const })));
+    }
+    logAction(`Auto-shortlisted by score (≥${threshold}) — ${advance.length} ready for assessment, ${decline.length} declined`, job?.title);
+    if (advance.length > 0) {
+      pushToast({ type: "success", title: "Auto-shortlist applied", message: `${advance.length} candidate${advance.length !== 1 ? "s" : ""} cleared the threshold — pick an assessment to invite them.` });
+      setInviteCandidates(advance.map((r) => ({ applicationId: r.applicationId, candidateName: r.candidateName, candidateEmail: r.candidateEmail })));
+    } else {
+      pushToast({ type: "success", title: "Auto-shortlist applied", message: `${decline.length} declined — nobody cleared the threshold.` });
+    }
     load();
   };
 
@@ -153,7 +166,7 @@ export function CandidateScoringPanel({ jobs, applications, jobId, cvStore, acto
         <label className="text-xs font-semibold text-caa-body">Auto-shortlist by score — advance candidates averaging ≥</label>
         <input type="number" min={0} max={100} className="w-20 text-xs font-semibold border border-caa-border rounded px-2 py-1.5 text-center" value={threshold} onChange={(e) => setThreshold(parseFloat(e.target.value) || 0)} />
         <button onClick={runAutoShortlist} disabled={scored.length === 0} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-caa-navy text-white rounded-md disabled:opacity-50"><Zap className="h-3.5 w-3.5" /> Run ({scored.length} scored)</button>
-        <p className="text-[11px] text-caa-muted">Advances candidates to Interview; the rest are Declined. Unscored candidates are skipped.</p>
+        <p className="text-[11px] text-caa-muted">Candidates below the threshold are Declined immediately. Candidates at or above it aren't auto-advanced — you'll be asked to pick an assessment type and schedule to invite them. Unscored candidates are skipped.</p>
       </div>
 
       {loading ? (
@@ -215,6 +228,17 @@ export function CandidateScoringPanel({ jobs, applications, jobId, cvStore, acto
             );
           })}
         </div>
+      )}
+
+      {inviteCandidates && (
+        <AssessmentInviteModal
+          job={job}
+          criteria={criteria}
+          candidates={inviteCandidates}
+          onClose={() => setInviteCandidates(null)}
+          logAction={logAction}
+          onDone={() => setInviteCandidates(null)}
+        />
       )}
     </div>
   );

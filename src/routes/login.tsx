@@ -4,10 +4,10 @@ import { LoginPage } from "@/features/auth/pages/LoginPage";
 export const Route = createFileRoute("/login")({
   head: () => ({
     meta: [
-      { title: "Sign In — CAA Uganda Recruitment" },
+      { title: "Sign In — UCAA Recruitment" },
       {
         name: "description",
-        content: "Sign in to your CAA Uganda Recruitment Portal candidate account.",
+        content: "Sign in to your UCAA Recruitment Portal candidate account.",
       },
     ],
   }),

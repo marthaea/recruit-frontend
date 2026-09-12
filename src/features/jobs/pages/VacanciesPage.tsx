@@ -42,7 +42,7 @@ export function VacanciesPage() {
   return (
     <>
       <div className="caa-hero-bg py-10 px-4 sm:px-6">
-        <div className="relative mx-auto max-w-6xl">
+        <div className="relative mx-auto max-w-7xl">
           <h1 className="font-bold text-white text-3xl md:text-4xl">Current Vacancies</h1>
           <p className="text-white/70 mt-1.5 text-sm">
             {visible.length} positions open · Updated June 2026
@@ -63,7 +63,7 @@ export function VacanciesPage() {
       </div>
 
       <div className="px-4 sm:px-6 mt-8">
-        <div className="mx-auto max-w-6xl">
+        <div className="mx-auto max-w-7xl">
           <div className="flex gap-2 overflow-x-auto pb-2">
             {tabs.map((t) => (
               <button
@@ -80,7 +80,7 @@ export function VacanciesPage() {
             ))}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mt-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 mt-6">
             {loading
               ? Array.from({ length: 4 }).map((_, i) => (
                   <div key={i} className="caa-card p-5 space-y-3">
