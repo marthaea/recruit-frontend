@@ -1,10 +1,14 @@
 // Central API client — all backend calls go through here.
 // See docs/07-frontend-integration.md in the backend repo for full integration guide.
 
-// Production default: same-origin /api (Netlify _redirects → BACKEND_API_URL).
-// Set VITE_API_URL only for exceptional split-host deployments (CORS + cookies required).
+// Production (browser): always same-origin /api so Netlify proxies to the backend and
+// httpOnly refresh cookies stay on the frontend host. Ignore VITE_API_URL in prod builds
+// when Netlify UI still has a stale cross-origin value from an earlier deploy.
 const configuredApiUrl = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "");
-const BASE = configuredApiUrl || "/api";
+const BASE =
+  import.meta.env.PROD && typeof window !== "undefined"
+    ? "/api"
+    : configuredApiUrl || "/api";
 
 // Access token lives in memory only — never in localStorage, where any XSS
 // could read it. Sessions survive page reloads via the httpOnly refresh

@@ -16,8 +16,9 @@
 [context.production.environment]
   BACKEND_API_URL = "https://api.mukasamatthew.com"
   BACKEND_API_URL_CANONICAL = "https://api.mukasamatthew.com"
+  VITE_API_URL = ""
 
-# Browser uses same-origin /api only (see src/services/api/client.ts). Do not set VITE_API_URL in production.
+# Browser uses same-origin /api only (see src/services/api/client.ts). Clear VITE_API_URL in Netlify UI if set.
 
 # Static assets from Vite are content-hashed (e.g. /assets/index-abc123.js)
 # so they can be cached for one year. Safe because the hash changes on every build.
