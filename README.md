@@ -11,7 +11,7 @@ Deployed independently on Netlify; talks only to the backend HTTP API.
 - `src/routes` — thin TanStack file-route adapters
 - `src/services` — API client and document utilities
 - `src/assets/images`, `src/constants`, `src/hooks`, `src/utils`, `src/styles`
-- `docs` — project notes and presentation material
+- `docs` — deployment runbook and routing notes
 
 `src/routeTree.gen.ts` is generated and should not be edited manually.
 
@@ -23,7 +23,7 @@ Set these in **Site settings → Environment variables**:
 
 | Variable | Required | Value |
 | --- | --- | --- |
-| `BACKEND_API_URL` | Yes (production) | Backend origin only, no trailing `/api`. Example: `http://YOUR_API_HOST:8082`. Deploy previews build without it, but `/api` proxying will be missing until it is set for all contexts. |
+| `BACKEND_API_URL` | Yes (production) | Backend origin only, no trailing `/api`. Example: `https://api.mukasamatthew.com`. |
 | `VITE_API_URL` | No | Leave empty so the browser uses same-origin `/api` (proxied by Netlify) |
 
 The production build writes `dist/_redirects`:
@@ -70,6 +70,7 @@ Production: set `SEED_DEMO=true` and `SEED_ALLOW_PRODUCTION=true` when running t
 npm ci
 npm run dev
 npm run verify    # typecheck + production build (same as CI)
+npm run smoke:prod   # read-only production HTTP checks (see runbook)
 npm run lint
 npm run typecheck
 npm run format:check
