@@ -84,10 +84,27 @@ Path on server: `/opt/caa-recruitment` (`docker compose`).
 
 ```bash
 cd /opt/caa-recruitment
-# sync source (git pull or rsync from final-caa-backend)
+# sync source (git pull or rsync from final-caa-backend — never overwrite .env)
 docker compose build api
-docker compose up -d api
+docker compose -f docker-compose.prod.yml up -d api --no-deps --force-recreate
 docker compose ps
+```
+
+**Protect secrets:** keep `/opt/caa-recruitment/.env` only on the server. After any change:
+
+```bash
+cp -a /opt/caa-recruitment/.env /opt/caa-recruitment/.env.backup-$(date +%F)
+chmod 600 /opt/caa-recruitment/.env*
+```
+
+**One-shot production env + API restart** (on the server, after Brevo creds are exported):
+
+```bash
+cd /opt/caa-recruitment
+SMTP_USER='your-brevo-smtp-login' \
+SMTP_PASSWORD='your-brevo-smtp-key' \
+SMTP_FROM='verified-sender@yourdomain.com' \
+./scripts/finish-production-on-server.sh
 ```
 
 Flyway runs on API startup; new migrations apply automatically.
@@ -125,6 +142,16 @@ curl -sS http://127.0.0.1:8082/ping
 
 After go-live, rotate demo admin passwords and restrict demo accounts to non-production environments when possible.
 
+### Protected production accounts (do not delete)
+
+These are **real operator/test accounts**, not demo seed data. Do **not** remove them during DB cleanup, re-seed, or manual SQL unless the owner asks:
+
+| Email | Notes |
+| --- | --- |
+| `matthewkesh950@gmail.com` | SMTP / portal test recipient; keep user row if registered |
+
+Never run `TRUNCATE users`, `seed:all`, or `rsync --delete` on production without backing up `.env` and confirming you are not wiping live candidates.
+
 ## Email (Brevo SMTP)
 
 Edit `/opt/caa-recruitment/.env` on the server (never commit secrets):
@@ -139,7 +166,17 @@ Edit `/opt/caa-recruitment/.env` on the server (never commit secrets):
 | `SMTP_FROM` | Address verified in Brevo |
 | `SMTP_SENDER_NAME` | `CAA HR Team` (or value from admin settings) |
 
-Then `cd /opt/caa-recruitment && docker compose up -d api`.
+Then `cd /opt/caa-recruitment && docker compose -f docker-compose.prod.yml up -d api --no-deps`.
+
+**Required in `/opt/caa-recruitment/.env` for Netlify + cookies:**
+
+| Variable | Value |
+| --- | --- |
+| `SPRING_PROFILES_ACTIVE` | `prod` (not `dev` — dev CORS defaults block `recruitfront.netlify.app` → **403** on login) |
+| `CORS_ALLOWED_ORIGINS` | `https://recruitfront.netlify.app` |
+| `FRONTEND_URL` | `https://recruitfront.netlify.app` |
+| `AUTH_COOKIE_SECURE` | `true` |
+| `AUTH_COOKIE_SAME_SITE` | `None` |
 
 From the backend repo you can merge vars safely:
 
@@ -149,7 +186,21 @@ SMTP_USER='…' SMTP_PASSWORD='…' SMTP_FROM='…' ./scripts/configure-brevo-en
 
 ### Verification emails not in the inbox
 
-`POST /api/auth/resend-verification` returning **200** means the app **queued** mail and the outbox worker **sent it to Brevo** — not that the recipient’s inbox received it.
+`POST /api/auth/resend-verification` returning **200** means the app **queued** mail in `outbox_events`. Delivery only happens when the API container has **`SMTP_ENABLED=true`** and valid Brevo credentials (`SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`). If SMTP is off, rows stay **`published_at IS NULL`** forever — no email leaves the server.
+
+On the server, confirm env (no secrets in logs):
+
+```bash
+docker exec caa-api printenv SMTP_ENABLED SMTP_HOST SMTP_PORT SMTP_FROM FRONTEND_URL
+```
+
+Expect `SMTP_ENABLED=true`, `SMTP_PORT=2525` on Thewton-Server, `FRONTEND_URL=https://recruitfront.netlify.app`, and non-empty `SMTP_FROM`. Configure via backend `scripts/configure-brevo-env.sh`, then:
+
+```bash
+cd /opt/caa-recruitment && docker compose -f docker-compose.prod.yml up -d api --no-deps
+```
+
+Pending verification events are sent on the next outbox poll once SMTP works.
 
 1. On the server, stuck outbox rows should be **0**:
 
@@ -167,6 +218,20 @@ SMTP_USER='…' SMTP_PASSWORD='…' SMTP_FROM='…' ./scripts/configure-brevo-en
 4. In **Brevo → Transactional**, check logs for blocks/bounces on that address. **`SMTP_FROM`** must be a verified sender in Brevo.
 
 5. **`FRONTEND_URL`** in `.env` must be `https://recruitfront.netlify.app` so links open the live portal.
+
+### Auth rate limiting (keep enabled)
+
+The API enforces per-IP limits in `ApiRateLimitFilter` (stored in `api_rate_limits`). This is **intentional** — do not disable it or bulk-clear the table in production.
+
+| Bucket | Limit | Window |
+| --- | --- | --- |
+| Auth (`login`, `register`, `reset-password`, `resend-verification`) | 10 requests | 15 minutes |
+| Forgot password | 3 requests | 1 hour |
+| General `/api/*` | 300 requests | 15 minutes |
+
+**HTTP 429** after repeated login or **Resend link** clicks is expected. Users should wait for the window to expire; the banner surfaces the API message (“Too many attempts. Please try again in 15 minutes.”).
+
+**Do not** run `DELETE FROM api_rate_limits` (or truncate the table) as routine troubleshooting. Old rows are pruned automatically (entries older than one day). Clearing limits weakens protection against credential stuffing and verification-email abuse.
 
 ## Related repos
 

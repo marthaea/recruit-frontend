@@ -686,7 +686,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const updateProfile = (patch: Partial<Pick<Auth, "firstName" | "lastName" | "email">>) => {
-    persist({ ...auth, ...patch });
+    const emailChanged =
+      patch.email != null && patch.email.toLowerCase() !== auth.email?.toLowerCase();
+    persist({
+      ...auth,
+      ...patch,
+      ...(emailChanged ? { emailVerified: false } : {}),
+    });
     // Previously local-only — the backend row never changed, so a reload
     // silently reverted the edit. Persist for real, keep the optimistic
     // local update either way.

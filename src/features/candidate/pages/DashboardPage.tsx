@@ -609,6 +609,9 @@ export function DashboardPage() {
                   onChange={(e) => setPf({ ...pf, email: e.target.value })}
                   className="mt-1 w-full px-3 py-2 text-sm border border-caa-border rounded-md focus:outline-none focus:border-caa-navy"
                 />
+                <p className="text-[11px] text-caa-muted mt-1">
+                  If you change this, you will sign in with the new address and we will send a verification link to it.
+                </p>
               </div>
             </div>
             <div className="flex justify-end gap-2 mt-5">
