@@ -91,6 +91,28 @@ curl -sS -X POST http://67.205.157.80:8082/api/auth/login \
 
 After go-live, rotate demo admin passwords and restrict demo accounts to non-production environments when possible.
 
+## Email (Brevo SMTP)
+
+Edit `/opt/caa-recruitment/.env` on the server (never commit secrets):
+
+| Variable | Production value |
+| --- | --- |
+| `SMTP_ENABLED` | `true` |
+| `SMTP_HOST` | `smtp-relay.brevo.com` |
+| `SMTP_PORT` | `2525` (use **2525** on Thewton-Server; outbound **587** is blocked) |
+| `SMTP_USER` | Brevo SMTP login from **Settings → SMTP & API** |
+| `SMTP_PASSWORD` | Brevo **SMTP key** (not account password) |
+| `SMTP_FROM` | Address verified in Brevo |
+| `SMTP_SENDER_NAME` | `CAA HR Team` (or value from admin settings) |
+
+Then `cd /opt/caa-recruitment && docker compose up -d api`.
+
+From the backend repo you can merge vars safely:
+
+```bash
+SMTP_USER='…' SMTP_PASSWORD='…' SMTP_FROM='…' ./scripts/configure-brevo-env.sh /opt/caa-recruitment/.env
+```
+
 ## Related repos
 
 - `final-caa-backend` — API, Flyway migrations, seeder
