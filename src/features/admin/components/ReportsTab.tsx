@@ -12,9 +12,21 @@ import {
   downloadJobsReport, downloadJobRequirementsReport, downloadApplicationsReport, downloadDepartmentSummary, downloadAuditLog, downloadInternsReport, downloadStaffReport, downloadTimeToHireReport, downloadDiversityReport, downloadScreeningPassRateReport, downloadApplicantsPerClosingDateReport,
   downloadAssessmentScheduleReport, downloadCandidateAssessmentReport, downloadDeploymentReport,
 } from "@/services/documents/pdf-reports";
-import { assessments as assessmentsApi, applications as appsApi } from "@/services/api/client";
+import { assessments as assessmentsApi, applications as appsApi, staff as staffApi, type StaffMember } from "@/services/api/client";
 import { downloadCsv } from "@/utils/csv-export";
-import { STAFF_DATA, fi, Field } from "./shared";
+import { fi, Field } from "./shared";
+import type { StaffRecord } from "@/services/documents/pdf-reports";
+
+const mapStaff = (s: StaffMember): StaffRecord => ({
+  empNo: s.empNo,
+  firstName: s.firstName,
+  lastName: s.lastName,
+  dept: s.dept ?? "",
+  position: s.position ?? "",
+  email: s.email ?? "",
+  joined: s.joined ?? "",
+  status: s.status,
+});
 
 const jobActiveLabel = (j: any) => (j.status === "published" && new Date(j.closesAt) >= new Date()) ? "Active" : "Closed";
 
@@ -23,8 +35,10 @@ export function ReportsTab({ jobs, applications, audit, actor, cvStore }: any) {
   useEffect(() => { loadDepartments(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [assessmentRows, setAssessmentRows] = useState<any[]>([]);
+  const [staffRows, setStaffRows] = useState<StaffRecord[]>([]);
   useEffect(() => {
     assessmentsApi.listAll().then((r) => { if (r.success) setAssessmentRows(r.data); }).catch(() => {});
+    staffApi.list().then((r) => { if (r.success) setStaffRows(r.data.map(mapStaff)); }).catch(() => {});
   }, []);
 
   const [deploying, setDeploying] = useState<Record<number, { station: string; date: string }>>({});
@@ -59,7 +73,7 @@ export function ReportsTab({ jobs, applications, audit, actor, cvStore }: any) {
   const filteredJobs = deptFilter ? jobs.filter((j: any) => j.dept === deptFilter) : jobs;
   const internApps = applyFilters(applications.filter((a: Application) => a.cgpa !== undefined));
   const filteredApps = applyFilters(applications);
-  const filteredStaff = deptFilter ? STAFF_DATA.filter((s) => s.dept === deptFilter) : STAFF_DATA;
+  const filteredStaff = deptFilter ? staffRows.filter((s) => s.dept === deptFilter) : staffRows;
 
   const jobTitleFilter = jobFilter ? jobs.find((j: any) => String(j.id) === jobFilter)?.title : undefined;
   const filteredAssessmentRows = assessmentRows.filter((r) =>

@@ -47,6 +47,23 @@ Leave `VITE_API_URL` empty. Vite proxies `/api` to `VITE_DEV_API_PROXY`.
 
 Never put secrets or database credentials in `VITE_*` variables.
 
+## Bootstrap data (PostgreSQL, not the frontend)
+
+Jobs, applications, portal settings, staff directory, demo CVs, and demo login accounts are **seeded by the Java backend** into PostgreSQL (`final-caa-backend` → `SeedCatalog` / `DatabaseSeeder`). This app starts empty and loads everything through `/api/*`.
+
+After the database schema exists:
+
+```bash
+cd ../final-caa-backend
+npm run seed:core    # departments, settings, admins, staff, 14 jobs
+npm run seed:demo    # demo candidates, CVs, pinned applications, analytics
+npm run seed:volume  # optional ~900 applications (dev/demo)
+# or
+npm run seed:all
+```
+
+Production: set `SEED_DEMO=true` and `SEED_ALLOW_PRODUCTION=true` when running the seed script (see backend README). Demo passwords are never shipped in this frontend bundle.
+
 ## Commands
 
 ```bash

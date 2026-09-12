@@ -1,25 +1,13 @@
 import { useState, useRef, useEffect } from "react";
 import {
-  CAA_STAFF, screeningAnswerPasses, type Job, type Application, type JobCriteria,
+  screeningAnswerPasses, type Job, type Application, type JobCriteria,
 } from "@/app/providers/AppContext";
-import {
-  type StaffRecord,
-} from "@/services/documents/pdf-reports";
 import { audit as auditApi } from "@/services/api/client";
 
-// ─── Staff data ───────────────────────────────────────────────────────────────
+// ─── Staff picklists (form labels — directory data comes from GET /api/staff) ─
 
 export const DEPT_LIST = ["Air Traffic Mgmt", "Aviation Safety", "Finance & Admin", "ICT & Systems", "Legal", "Operations", "Human Resources", "Procurement", "Engineering", "Communications"];
 export const POSITIONS = ["Director", "Manager", "Senior Officer", "Officer", "Analyst", "Coordinator", "Specialist", "Assistant"];
-
-export const STAFF_DATA: StaffRecord[] = Object.entries(CAA_STAFF).map(([empNo, { firstName, lastName }], i) => ({
-  empNo, firstName, lastName,
-  dept: DEPT_LIST[i % DEPT_LIST.length],
-  position: POSITIONS[i % POSITIONS.length],
-  email: `${firstName.toLowerCase()}${lastName.toLowerCase()}@caa.go.ug`,
-  joined: `${2014 + (i % 9)}-${String((i % 12) + 1).padStart(2, "0")}-${String((i % 28) + 1).padStart(2, "0")}`,
-  status: "Active",
-}));
 
 // ─── Colors ───────────────────────────────────────────────────────────────────
 
@@ -220,61 +208,30 @@ export function autoQualify(app: Application, job: Job | undefined, cv: any, job
       }
     }
   } else {
-    // ── Demo fallback: no portal CV on file ─────────────────────────────
-    // Applicant submitted materials outside the portal (realistic for Uganda context).
-    // Pass rate targets ~70% of pending/under-review pool.
-    // Deterministic per applicant — same result on every screening run.
-    const seed = (app.id * 31 + app.completion * 7) % 100;
-    const basePass = app.completion >= 75;
-    const borderPass = app.completion >= 60 && seed < 50;
-    const demoOk = basePass || borderPass;
-
     checks.push({
-      label: "Age & eligibility",
-      pass: demoOk,
-      detail: demoOk ? "Meets minimum age for this role" : "Below minimum age threshold",
+      label: "Portal CV",
+      pass: false,
+      detail: "No CV on file — fetch candidate profiles from the server before screening",
     });
-    checks.push({
-      label: `Qualifications (min. ${effectiveQual})`,
-      pass: demoOk,
-      detail: demoOk ? `${effectiveQual} or equivalent confirmed` : `Does not meet ${effectiveQual} requirement`,
-    });
-    if (effectiveExp > 0) {
-      checks.push({
-        label: `Experience (${effectiveExp} yr min)`,
-        pass: demoOk,
-        detail: demoOk ? `${effectiveExp}+ year(s) of relevant experience` : "Insufficient relevant experience on record",
-      });
-    }
 
-    // CGPA still uses real data if present
     if (jobCriteria?.minCgpa !== undefined && app.cgpa !== undefined) {
       checks.push({ label: "CGPA", pass: app.cgpa >= jobCriteria.minCgpa, detail: `${app.cgpa.toFixed(1)} vs min ${jobCriteria.minCgpa.toFixed(1)}` });
     }
 
-    // Disqualifying universities
     if (jobCriteria?.disqualifyingUniversities?.length && app.university) {
       const flagged = jobCriteria.disqualifyingUniversities.some((u) => app.university!.toLowerCase().includes(u.toLowerCase()));
       checks.push({ label: "Institution", pass: !flagged, detail: flagged ? `${app.university} is on the disqualifying list` : "Not on the disqualifying list" });
     }
 
-    // Screening questions: precise answer check if the candidate answered on the application
-    // form; otherwise demo mode mirrors demoOk for qualifiers / rarely flags disqualifiers.
     if (jobCriteria?.screeningQuestions?.length) {
       for (const q of jobCriteria.screeningQuestions) {
         const qLabel = `${q.type === "qualifier" ? "Q" : "⚠"}: ${q.text.slice(0, 35)}${q.text.length > 35 ? "…" : ""}`;
         const answer = app.screeningAnswers?.[q.id];
-        if (q.kind && answer !== undefined) {
+        if (q.kind) {
           const pass = screeningAnswerPasses(q, answer);
-          checks.push({ label: qLabel, pass, detail: `Answered "${answer}" — ${pass ? "meets" : "does not meet"} requirement` });
-          continue;
-        }
-        const qSeed = (app.id * 13 + q.text.length * 7) % 100;
-        if (q.type === "qualifier") {
-          checks.push({ label: qLabel, pass: demoOk, detail: demoOk ? "Criterion met (from submitted documents)" : "Not satisfied" });
+          checks.push({ label: qLabel, pass, detail: answer ? `Answered "${answer}" — ${pass ? "meets" : "does not meet"} requirement` : "Not answered" });
         } else {
-          const flagged = !demoOk && qSeed < 30;
-          checks.push({ label: qLabel, pass: !flagged, detail: !flagged ? "Not flagged" : "Disqualifying indicator found" });
+          checks.push({ label: qLabel, pass: false, detail: "Requires CV evidence — not available" });
         }
       }
     }
