@@ -85,6 +85,9 @@ Path on server: `/opt/caa-recruitment` (`docker compose`).
 ```bash
 cd /opt/caa-recruitment
 # sync source (git pull or rsync from final-caa-backend — never overwrite .env)
+# Example rsync from your laptop (excludes secrets):
+#   rsync -az --delete --exclude '.env' --exclude '.env.*' --exclude 'target/' \
+#     ./final-caa-backend/ root@HOST:/opt/caa-recruitment/
 docker compose build api
 docker compose -f docker-compose.prod.yml up -d api --no-deps --force-recreate
 docker compose ps
