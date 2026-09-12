@@ -27,18 +27,43 @@ import { PermissionsTab } from "@/features/admin/components/PermissionsTab";
 import { AdministrationTab } from "@/features/admin/components/AdministrationTab";
 import { AssessmentTab } from "@/features/admin/components/AssessmentTab";
 import { EmailsTab } from "@/features/admin/components/EmailsTab";
-import { useOnboardingTour, OnboardingPrompt, OnboardingSpotlight, type TourDef } from "@/features/onboarding/OnboardingTour";
+import { useOnboardingTour, OnboardingPrompt, OnboardingSpotlight, type TourDef, type TourStep } from "@/features/onboarding/OnboardingTour";
 
-const ADMIN_TOUR: TourDef = {
-  key: "admin",
-  welcomeTitle: "Welcome to the HR Console",
-  welcomeBody: "Want a quick orientation? We'll point out where the dashboard, the sidebar sections, and pending actions live — takes less than a minute.",
-  steps: [
-    { target: '[data-tour="admin-stats"]', title: "Your dashboard at a glance", body: "Key numbers for the whole recruitment pipeline — click any card to jump straight to that section." },
-    { target: '[data-tour="nav-sidebar"]', title: "Everything lives in the sidebar", body: "Recruitment, People & Insights, System, and Administration are grouped here — you'll only see the sections your role has access to." },
-    { target: '[data-tour="pending-actions"]', title: "Don't miss what needs attention", body: "New applications, candidates awaiting interview, and vacancies closing soon all surface right here." },
-  ],
-};
+const ADMIN_TOUR_INTRO_STEPS: TourStep[] = [
+  { target: '[data-tour="admin-stats"]', title: "Your dashboard at a glance", body: "Key numbers for the whole recruitment pipeline — click any card to jump straight to that section." },
+  { target: '[data-tour="nav-sidebar"]', title: "Everything lives in the sidebar", body: "Recruitment, People & Insights, System, and Administration are grouped here — you'll only see the sections your role has access to." },
+  { target: '[data-tour="pending-actions"]', title: "Don't miss what needs attention", body: "New applications, candidates awaiting interview, and vacancies closing soon all surface right here." },
+];
+
+/** Walks a hiring admin through actually posting a vacancy — appended to the
+ *  base tour only for roles that can reach Create Job (see `canCreateJobs`
+ *  below), since spotlighting a nav item/form the viewer can't open would
+ *  just show an empty centered card. */
+function createJobTourSteps(go: (t: AdminTab) => void): TourStep[] {
+  return [
+    {
+      target: '[data-tour="nav-jobs"]',
+      title: "Posting a new vacancy",
+      body: "When a position opens up, head here — Create Job in the Recruitment section. Let's walk through it together.",
+    },
+    {
+      target: '[data-tour="job-basic-details"]',
+      title: "Start with the basics",
+      body: "We've opened a blank listing so you can see the form (the same \"New listing\" button does this yourself, any time). Title, reference number, department, location and salary scale all live here.",
+      onEnter: () => go("jobs"),
+    },
+    {
+      target: '[data-tour="job-requirements"]',
+      title: "Set the requirements",
+      body: "Add essential and desirable requirements — each one can become a candidate-facing qualifying question, a hard disqualifier, or stay silent for internal screening only.",
+    },
+    {
+      target: '[data-tour="job-save-actions"]',
+      title: "Save or submit for review",
+      body: "\"Save as draft\" keeps your work without publishing anything. \"Save & submit for review\" sends it into the approval workflow before it goes live to candidates.",
+    },
+  ];
+}
 
 // ─── RBAC-aware nav, grouped into sidebar sections ────────────────────────────
 
@@ -88,9 +113,23 @@ export function AdminPage() {
   });
   const navigate = useNavigate();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  // Plain derived values, not hooks — safe to compute ahead of the early
+  // returns below so the tour def (built from them) can feed the hook that
+  // must itself run before those returns. Meaningless (but harmless) until
+  // auth.accountType is really "admin".
+  const role = auth.adminRole ?? "hr";
+  const perms = permissionOverrides;
+  const go = (t: AdminTab) => { navigate({ to: "/admin", search: { tab: t } }); setMobileNavOpen(false); };
+  const canCreateJobs = canAccess(role, "canManageJobs", perms);
+  const adminTour: TourDef = {
+    key: "admin",
+    welcomeTitle: "Welcome to the HR Console",
+    welcomeBody: "Want a quick orientation? We'll point out where the dashboard, the sidebar sections, and pending actions live — and walk through posting a vacancy — takes a couple of minutes.",
+    steps: canCreateJobs ? [...ADMIN_TOUR_INTRO_STEPS, ...createJobTourSteps(go)] : ADMIN_TOUR_INTRO_STEPS,
+  };
   // Hooks must run before the early returns below (sessionRestoring / not-an-admin) —
   // the tour itself only ever activates once auth.accountType is really "admin".
-  const tour = useOnboardingTour(ADMIN_TOUR, auth.accountType === "admin" ? auth.email : null);
+  const tour = useOnboardingTour(adminTour, auth.accountType === "admin" ? auth.email : null);
   // On mobile the sidebar is a closed-by-default drawer — a tour step
   // spotlighting it would otherwise target an element sitting off-screen
   // at translateX(-100%). Force it open for the whole tour; desktop already
@@ -131,9 +170,6 @@ export function AdminPage() {
     );
   }
 
-  const role = auth.adminRole ?? "hr";
-  const perms = permissionOverrides;
-  const go = (t: AdminTab) => { navigate({ to: "/admin", search: { tab: t } }); setMobileNavOpen(false); };
   const actor = `${auth.firstName} ${auth.lastName}`;
 
   // A nav entry's perm can be a single key, or "|"-separated alternatives
@@ -204,7 +240,7 @@ export function AdminPage() {
                 const active = tab === key;
                 const badge = navBadges[key];
                 return (
-                  <button key={key} onClick={() => go(key)}
+                  <button key={key} data-tour={`nav-${key}`} onClick={() => go(key)}
                     className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-colors text-left mb-0.5 ${
                       active ? "bg-white/15 text-white shadow-sm" : "text-white/65 hover:bg-white/8 hover:text-white"
                     }`}
@@ -273,7 +309,7 @@ export function AdminPage() {
             (tables, the Kanban board) rather than intentional whitespace. */}
         <div className="px-4 sm:px-6 py-4 sm:py-6 max-w-[1600px] mx-auto">
           {tab === "dashboard"   && <DashboardTab jobs={jobs} applications={applications} isExpired={isExpired} navigate={navigate} role={role} settings={settings} auth={auth} />}
-          {tab === "jobs"        && canAccess(role, "canManageJobs", perms) && <JobsTab jobs={jobs} applications={applications} isExpired={isExpired} addJob={addJob} updateJob={updateJob} deleteJob={deleteJob} onViewApps={(id: number) => navigate({ to: "/admin", search: { tab: "apps", jobId: id } })} viewMode="create" />}
+          {tab === "jobs"        && canAccess(role, "canManageJobs", perms) && <JobsTab jobs={jobs} applications={applications} isExpired={isExpired} addJob={addJob} updateJob={updateJob} deleteJob={deleteJob} onViewApps={(id: number) => navigate({ to: "/admin", search: { tab: "apps", jobId: id } })} viewMode="create" tourAutoOpen={tour.stage === "touring"} />}
           {tab === "review-jobs" && canAccess(role, "canReviewJob", perms) && <JobsTab jobs={jobs} applications={applications} isExpired={isExpired} onViewApps={(id: number) => navigate({ to: "/admin", search: { tab: "apps", jobId: id } })} viewMode="review" />}
           {tab === "approve-jobs" && canAccess(role, "canApproveJob", perms) && <JobsTab jobs={jobs} applications={applications} isExpired={isExpired} onViewApps={(id: number) => navigate({ to: "/admin", search: { tab: "apps", jobId: id } })} viewMode="approve" />}
           {tab === "apps"        && canAccess(role, "canViewApplications", perms) && <AppsTab jobs={jobs} applications={applications} jobId={jobId} cvStore={cvStore} updateStatus={updateApplicationStatus} bulkUpdateStatus={bulkUpdateApplicationStatus} logAction={logAction} actor={actor} criteria={criteria} role={role} perms={perms} logEmail={logEmail} bulkLogEmails={bulkLogEmails} mode="list" onSelectJob={(id: number) => navigate({ to: "/admin", search: { tab: "apps", jobId: id } })} onClearJob={() => navigate({ to: "/admin", search: { tab: "apps" } })} />}
@@ -303,8 +339,8 @@ export function AdminPage() {
         </div>
       </div>
 
-      {tour.stage === "prompt" && <OnboardingPrompt def={ADMIN_TOUR} onAccept={tour.accept} onSkip={tour.dismiss} />}
-      {tour.stage === "touring" && <OnboardingSpotlight steps={ADMIN_TOUR.steps} onFinish={tour.dismiss} onSkip={tour.dismiss} />}
+      {tour.stage === "prompt" && <OnboardingPrompt def={adminTour} onAccept={tour.accept} onSkip={tour.dismiss} />}
+      {tour.stage === "touring" && <OnboardingSpotlight steps={adminTour.steps} onFinish={tour.dismiss} onSkip={tour.dismiss} />}
     </div>
   );
 }
