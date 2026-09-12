@@ -24,9 +24,24 @@ export function EmailVerifyBanner() {
     setSending(true);
     try {
       const r = await authApi.resendVerification();
-      pushToast({ type: "info", title: "Verification email", message: r.data.message });
+      const detail =
+        r.data.message === "Email already verified"
+          ? "Your email is already verified."
+          : "We sent a new link. It can take a few minutes — check spam/junk and promotions, and use the latest email only (older links stop working after one use).";
+      pushToast({
+        type: r.data.message === "Email already verified" ? "success" : "info",
+        title: "Verification email",
+        message: detail,
+      });
     } catch (e) {
-      pushToast({ type: "warning", title: "Could not send", message: (e as Error).message });
+      const msg = (e as Error).message;
+      pushToast({
+        type: "warning",
+        title: "Could not send",
+        message: msg.includes("Too many attempts")
+          ? msg
+          : msg || "Sign in again, then tap Resend link. If it still fails, contact HR.",
+      });
     } finally {
       setSending(false);
     }

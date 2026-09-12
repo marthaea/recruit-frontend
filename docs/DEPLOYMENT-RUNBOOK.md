@@ -147,6 +147,27 @@ From the backend repo you can merge vars safely:
 SMTP_USER='…' SMTP_PASSWORD='…' SMTP_FROM='…' ./scripts/configure-brevo-env.sh /opt/caa-recruitment/.env
 ```
 
+### Verification emails not in the inbox
+
+`POST /api/auth/resend-verification` returning **200** means the app **queued** mail and the outbox worker **sent it to Brevo** — not that the recipient’s inbox received it.
+
+1. On the server, stuck outbox rows should be **0**:
+
+   ```bash
+   docker exec caa-postgres psql -U caa -d caa_recruitment -t -c \
+     "SELECT count(*) FROM outbox_events WHERE event_type = 'identity.email-verification-requested' AND published_at IS NULL;"
+   ```
+
+   If `last_error` mentions mail connection failures, recheck `SMTP_HOST` / `SMTP_PORT` (2525) and restart `api`.
+
+2. Ask the user to check **spam/junk/promotions** and wait a few minutes.
+
+3. Each link works **once**; opening an old link again shows “invalid or already used” — use **Resend link** and the **newest** email.
+
+4. In **Brevo → Transactional**, check logs for blocks/bounces on that address. **`SMTP_FROM`** must be a verified sender in Brevo.
+
+5. **`FRONTEND_URL`** in `.env` must be `https://recruitfront.netlify.app` so links open the live portal.
+
 ## Related repos
 
 - `final-caa-backend` — API, Flyway migrations, seeder
