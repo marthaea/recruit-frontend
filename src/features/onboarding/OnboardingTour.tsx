@@ -9,6 +9,11 @@ export type TourStep = {
   target: string;
   title: string;
   body: string;
+  /** Runs once when the tour reaches this step, before it measures `target` —
+   *  lets a step switch tabs/views first (e.g. `() => go("jobs")`) so a
+   *  target that only exists elsewhere in the app is on-screen by the time
+   *  it's spotlighted. */
+  onEnter?: () => void;
 };
 
 export type TourDef = {
@@ -114,12 +119,20 @@ export function OnboardingSpotlight({ steps, onFinish, onSkip }: { steps: TourSt
     const el = step ? document.querySelector(step.target) : null;
     setRect(el ? el.getBoundingClientRect() : null);
   };
+  const cleanupInner = useRef<(() => void) | undefined>(undefined);
 
   useEffect(() => {
-    const el = step ? document.querySelector(step.target) : null;
-    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
-    const t = setTimeout(() => measure.current(), el ? 320 : 0);
-    return () => clearTimeout(t);
+    step?.onEnter?.();
+    // A step that switches tabs/views needs a beat for that state change to
+    // render before its target exists in the DOM — harmless for ordinary
+    // same-page steps too, which just get a near-instant first timer.
+    const t1 = setTimeout(() => {
+      const el = step ? document.querySelector(step.target) : null;
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+      const t2 = setTimeout(() => measure.current(), el ? 320 : 0);
+      cleanupInner.current = () => clearTimeout(t2);
+    }, step?.onEnter ? 80 : 0);
+    return () => { clearTimeout(t1); cleanupInner.current?.(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [index]);
 

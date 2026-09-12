@@ -1,18 +1,39 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import {
   BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid,
 } from "recharts";
 import {
-  Users, Briefcase, Archive, GraduationCap, CheckCircle2, Printer,
+  Users, Briefcase, Archive, GraduationCap, CheckCircle2, Printer, Camera,
 } from "lucide-react";
 import {
-  type Job, type Application,
+  useApp, type Job, type Application,
 } from "@/app/providers/AppContext";
+import { cv as cvApi } from "@/services/api/client";
+import { PhotoCropModal } from "@/features/candidate/components/PhotoCropModal";
 import { AnimatedSection, STATUS_COLORS } from "./shared";
 
 export function DashboardTab({ jobs, applications, isExpired, navigate, settings, auth }: any) {
+  const { updatePhotoUrl, pushToast } = useApp();
   const activeJobs = jobs.filter((j: Job) => !isExpired(j));
   const printRef = useRef<HTMLDivElement>(null);
+  const [photoModalOpen, setPhotoModalOpen] = useState(false);
+
+  const handlePhotoSave = async (dataUrl: string, blob: Blob) => {
+    updatePhotoUrl(dataUrl); // optimistic — show immediately
+    setPhotoModalOpen(false);
+    try {
+      const file = new File([blob], "profile.jpg", { type: "image/jpeg" });
+      const res = await cvApi.upload(file, "photo");
+      // Unlike a candidate's photo, this isn't saved to a CV profile (admins
+      // don't have one) — it persists locally (state + localStorage) the
+      // same way it already did before the upload finished, just backed by
+      // a real server file instead of a data URL.
+      if (res.success && res.data.url) updatePhotoUrl(res.data.url);
+    } catch {
+      // keep the local data-URL — still shows correctly without a server copy
+    }
+    pushToast({ type: "success", title: "Profile photo updated" });
+  };
 
   const statusData = Object.entries(
     applications.reduce((acc: any, a: Application) => ({ ...acc, [a.status]: (acc[a.status] ?? 0) + 1 }), {})
@@ -82,19 +103,29 @@ export function DashboardTab({ jobs, applications, isExpired, navigate, settings
           text rows. */}
       <div className="admin-card p-5 flex items-center justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-4 min-w-0">
-          {auth?.photoUrl ? (
-            <img
-              src={auth.photoUrl}
-              alt="Profile"
-              className="h-14 w-14 rounded-2xl object-cover border border-caa-border shadow-sm shrink-0"
-            />
-          ) : (
-            <div className="h-14 w-14 rounded-2xl bg-caa-navy/10 border border-caa-border flex items-center justify-center shrink-0">
-              <span className="text-caa-navy font-bold select-none">
-                {auth?.firstName?.[0]}{auth?.lastName?.[0]}
-              </span>
-            </div>
-          )}
+          <button
+            onClick={() => setPhotoModalOpen(true)}
+            className="relative group shrink-0 focus:outline-none"
+            aria-label="Change profile photo"
+          >
+            {auth?.photoUrl ? (
+              <img
+                src={auth.photoUrl}
+                alt="Profile"
+                className="h-20 w-20 rounded-2xl object-cover border border-caa-border shadow-sm group-hover:border-caa-navy transition-colors"
+              />
+            ) : (
+              <div className="h-20 w-20 rounded-2xl bg-caa-navy/10 border border-caa-border group-hover:border-caa-navy flex items-center justify-center transition-colors">
+                <span className="text-caa-navy font-bold text-xl select-none">
+                  {auth?.firstName?.[0]}{auth?.lastName?.[0]}
+                </span>
+              </div>
+            )}
+            {/* Camera badge on hover */}
+            <span className="absolute -bottom-1 -right-1 h-7 w-7 rounded-full bg-caa-navy border-2 border-white shadow flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+              <Camera className="h-3.5 w-3.5 text-white" />
+            </span>
+          </button>
           <div className="min-w-0">
             <h1 className="font-bold text-2xl text-caa-body truncate">Hi {auth?.firstName ?? "there"}</h1>
             <p className="text-xs text-caa-muted mt-0.5">{today}</p>
@@ -265,6 +296,13 @@ export function DashboardTab({ jobs, applications, isExpired, navigate, settings
         </div>
       </div>
       </AnimatedSection>
+
+      <PhotoCropModal
+        open={photoModalOpen}
+        currentPhoto={auth?.photoUrl}
+        onClose={() => setPhotoModalOpen(false)}
+        onSave={handlePhotoSave}
+      />
     </div>
   );
 }

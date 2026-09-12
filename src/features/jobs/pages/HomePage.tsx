@@ -5,6 +5,8 @@ import { JobCard } from "@/features/jobs/components/JobCard";
 import { useApp } from "@/app/providers/AppContext";
 import heroUgandaAirlines from "@/assets/images/hero-uganda-airlines.jpg";
 import heroWelcomeUganda from "@/assets/images/hero-welcome-uganda.jpg";
+import heroCaaHeadOffice from "@/assets/images/hero-caa-head-office.jpg";
+import heroEntebbeApron from "@/assets/images/hero-entebbe-apron.jpg";
 
 export function HomePage() {
   const { jobs, canSeeJob } = useApp();
@@ -33,7 +35,7 @@ export function HomePage() {
     document.getElementById("featured")?.scrollIntoView({ behavior: "smooth" });
   };
 
-  const slides = [heroUgandaAirlines, heroWelcomeUganda];
+  const slides = [heroUgandaAirlines, heroWelcomeUganda, heroCaaHeadOffice, heroEntebbeApron];
   const [slide, setSlide] = useState(0);
   useEffect(() => {
     const t = setInterval(() => setSlide((s) => (s + 1) % slides.length), 2000);

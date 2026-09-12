@@ -133,11 +133,12 @@ export function PhotoCropModal({ open, currentPhoto, onClose, onSave }: Props) {
     canvas.width = canvas.height = OUTPUT;
     const ctx = canvas.getContext("2d")!;
 
-    // Circular clip
-    ctx.beginPath();
-    ctx.arc(OUTPUT / 2, OUTPUT / 2, OUTPUT / 2, 0, Math.PI * 2);
-    ctx.clip();
-
+    // No circular clip here — JPEG has no alpha channel, so the corners left
+    // transparent by a circular clip get flattened to solid black on export
+    // (browsers' default JPEG-encode background). Export the full square
+    // instead; every place this photo is displayed already applies its own
+    // CSS rounding (circle or rounded-square), so the stored image doesn't
+    // need to be pre-clipped to match one specific shape.
     ctx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, OUTPUT, OUTPUT);
 
     canvas.toBlob(blob => {

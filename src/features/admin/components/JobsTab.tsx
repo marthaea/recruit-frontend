@@ -225,7 +225,7 @@ const STATUS_STYLES: Record<JobStatus, string> = {
   declined: "bg-caa-danger/10 text-caa-danger",
 };
 
-export function JobsTab({ jobs, applications, isExpired, addJob, updateJob, deleteJob, onViewApps, viewMode = "create" }: any) {
+export function JobsTab({ jobs, applications, isExpired, addJob, updateJob, deleteJob, onViewApps, viewMode = "create", tourAutoOpen }: any) {
   type EditingJob = Omit<Job, "id" | "abbr"> & { id?: number };
   const [editing, setEditing] = useState<null | EditingJob>(null);
   const [inputMode, setInputMode] = useState<"manual" | "pdf">("manual");
@@ -292,6 +292,14 @@ export function JobsTab({ jobs, applications, isExpired, addJob, updateJob, dele
     setShowReview(false);
     setTemplateId("");
   };
+
+  // The onboarding tour lands here wanting to spotlight fields inside the
+  // create-listing form — open a blank one automatically instead of leaving
+  // the admin to click "New listing" mid-tour.
+  useEffect(() => {
+    if (tourAutoOpen) open();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tourAutoOpen]);
 
   const save = async (thenSubmitForReview: boolean) => {
     if (!editing) return;
@@ -610,7 +618,7 @@ export function JobsTab({ jobs, applications, isExpired, addJob, updateJob, dele
             {/* Basic fields */}
             <Section title="Basic details">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Field label="Title"><input className={fi} value={editing.title} onChange={(e) => setEditing({ ...editing, title: e.target.value })} placeholder="e.g. Senior Air Traffic Controller" /></Field>
+                <Field label="Title"><input data-tour="job-basic-details" className={fi} value={editing.title} onChange={(e) => setEditing({ ...editing, title: e.target.value })} placeholder="e.g. Senior Air Traffic Controller" /></Field>
                 <Field label="Job reference no."><input className={fi} value={editing.jobRef ?? ""} onChange={(e) => setEditing({ ...editing, jobRef: e.target.value })} placeholder="e.g. UCAA/ADV/EXT/01/2026" /></Field>
                 <Field label="Department"><select className={fi} value={editing.deptKey} onChange={(e) => { const d = deptOptions.find((x) => x.key === e.target.value)!; setEditing({ ...editing, deptKey: d.key, dept: d.label, departmentId: d.id ?? editing.departmentId }); }}>{deptOptions.map((d) => <option key={d.key} value={d.key}>{d.label}</option>)}</select></Field>
                 <Field label="Location"><select className={fi} value={editing.location} onChange={(e) => setEditing({ ...editing, location: e.target.value })}>{LOCATIONS.map((l) => <option key={l}>{l}</option>)}</select></Field>
@@ -655,7 +663,7 @@ export function JobsTab({ jobs, applications, isExpired, addJob, updateJob, dele
               <p className="text-[11px] text-caa-muted -mt-1 mb-1">
                 Build essential and desirable requirements. Essential items can become a candidate-facing <span className="font-semibold text-caa-navy">qualifier</span> or <span className="font-semibold text-caa-danger">disqualifier</span> question, or stay silent (criteria-only, for internal screening only).
               </p>
-              <div className="rounded-lg border border-caa-border p-3 space-y-2">
+              <div data-tour="job-requirements" className="rounded-lg border border-caa-border p-3 space-y-2">
                 <div className="flex flex-wrap gap-2">
                   <select className={`${fi} w-56`} value={reqKind} onChange={(e) => { setReqKind(e.target.value as RequirementKind); resetReqInputs(); }}>
                     {Object.entries(REQUIREMENT_KIND_META).map(([k, meta]) => <option key={k} value={k}>{meta.label}</option>)}
@@ -861,7 +869,7 @@ export function JobsTab({ jobs, applications, isExpired, addJob, updateJob, dele
           </p>
         )}
 
-        <div className="flex flex-wrap justify-between items-center gap-2 pb-6">
+        <div data-tour="job-save-actions" className="flex flex-wrap justify-between items-center gap-2 pb-6">
           <div>
             {editing.title && editing.closesAt && (
               <button
