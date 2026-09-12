@@ -24,11 +24,17 @@ Frontend (Netlify) and backend (Docker on your server) are deployed independentl
 3. **Verify after deploy**:
 
    ```bash
+   npm run smoke:prod
+   ```
+
+   Or manually:
+
+   ```bash
    curl -sS -o /dev/null -w '%{http_code}\n' https://recruitfront.netlify.app/api/jobs
    curl -sS -o /dev/null -w '%{http_code}\n' https://recruitfront.netlify.app/api/settings
    ```
 
-   Expect `200`. In the browser, hard refresh once (`Ctrl+Shift+R`) so old demo `localStorage` keys are cleared.
+   Expect `200`. In the browser, hard refresh once (`Ctrl+Shift+R`) so old demo `localStorage` keys are cleared. Log in with backend demo accounts to confirm dashboards (passwords in backend README only).
 
 4. **Smoke pages**: `/`, `/vacancies`, `/login`, `/dashboard` (candidate), `/admin` (HR).
 

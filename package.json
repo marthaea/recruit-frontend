@@ -11,6 +11,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "verify": "npm run typecheck && npm run build",
+    "smoke:prod": "bash scripts/smoke-production.sh",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
