@@ -84,14 +84,17 @@ Path on server: `/opt/caa-recruitment` (`docker compose`).
 
 ```bash
 cd /opt/caa-recruitment
-# sync source (git pull or rsync from final-caa-backend — never overwrite .env)
+# Always use the production stack (bare `docker compose` may pick dev-only compose.yml):
 # Example rsync from your laptop (excludes secrets):
 #   rsync -az --delete --exclude '.env' --exclude '.env.*' --exclude 'target/' \
 #     ./final-caa-backend/ root@HOST:/opt/caa-recruitment/
-docker compose build api
+docker compose -f docker-compose.prod.yml build api
 docker compose -f docker-compose.prod.yml up -d api --no-deps --force-recreate
-docker compose ps
+docker compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.prod.yml logs -f --tail 20 api
 ```
+
+`docker-compose.yml` includes `docker-compose.prod.yml` (same stack). After editing `.env`, recreate the API so env vars reload.
 
 **Protect secrets:** keep `/opt/caa-recruitment/.env` only on the server. After any change:
 
