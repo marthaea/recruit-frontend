@@ -30,8 +30,13 @@ export const ADMIN_ROLES: AdminRole[] = ["super", "hr", "recruiter", "auditor", 
 export const ADMIN_ROLE_LABELS: Record<AdminRole, string> = {
   super: "Super Admin", hr: "HR Manager", recruiter: "Recruiter",
   auditor: "Auditor", hr_officer: "HR Officer", it_admin: "IT Admin",
-  dhra: "DHRA (Director HR & Administration)", hod: "Head of Department",
+  dhra: "Director HR & Administration", hod: "Head of Department",
 };
+
+/** GET /api/permissions is authorised only for roles with canGrantPermissions (super). */
+function canLoadPermissionOverrides(user: Pick<UserResponse, "accountType" | "adminRole">): boolean {
+  return user.accountType === "admin" && user.adminRole === "super";
+}
 export type AuditEntry = { id: number; at: string; actor: string; role: string; action: string; target?: string };
 export type JobTemplate = { id: number; name: string; departmentId?: number | null; sourceJobId?: number | null; content: Record<string, unknown>; createdAt?: string };
 export type AdminSettings = {
@@ -539,13 +544,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
       fetchJobsList();
       notifApi.list().then(r => { if (r.success) persistNotifs(r.data as unknown as Notification[]); }).catch(() => {});
       permissionsApi.roleDefaults().then(r => { if (r.success) setRoleDefaults(r.data.defaults as Record<AdminRole, Partial<PermissionOverride>>); }).catch(() => {});
-      permissionsApi.list().then(r => {
-        if (r.success) {
-          const data = r.data as unknown as PermissionOverride[];
-          setPermissionOverrides(data);
-          try { localStorage.setItem(PERMS_KEY, JSON.stringify(data)); } catch {}
-        }
-      }).catch(() => {});
+      if (auth.adminRole === "super") {
+        permissionsApi.list().then(r => {
+          if (r.success) {
+            const data = r.data as unknown as PermissionOverride[];
+            setPermissionOverrides(data);
+            try { localStorage.setItem(PERMS_KEY, JSON.stringify(data)); } catch {}
+          }
+        }).catch(() => {});
+      }
     }
     appsApi.list().then(r => { if (r.success) persistApps(r.data as unknown as Application[]); }).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -615,14 +622,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
         emailVerified: u.emailVerified,
       });
       // Load real data in the background
-      const isAdmin = u.accountType === "admin";
       Promise.all([
         fetchJobsList(),
         appsApi.list().then(r => { if (r.success) persistApps(r.data as unknown as Application[]); }).catch(() => {}),
         settingsApi.get().then(r => { if (r.success) setSettings(prev => ({ ...prev, ...(r.data as unknown as AdminSettings) })); }).catch(() => {}),
         notifApi.list().then(r => { if (r.success) persistNotifs(r.data as unknown as Notification[]); }).catch(() => {}),
         permissionsApi.roleDefaults().then(r => { if (r.success) setRoleDefaults(r.data.defaults as Record<AdminRole, Partial<PermissionOverride>>); }).catch(() => {}),
-        ...(isAdmin
+        ...(canLoadPermissionOverrides(u)
           ? [
               permissionsApi.list().then(r => {
                 if (r.success) {
