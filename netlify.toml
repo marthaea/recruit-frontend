@@ -9,13 +9,13 @@
 # Same-origin /api → public API (survives stale Netlify UI values like host:8082).
 [[redirects]]
   from = "/api/*"
-  to = "https://api.mukasamatthew.com/api/:splat"
+  to = "https://api.edu-bridge.world/api/:splat"
   status = 200
   force = true
 
 [context.production.environment]
-  BACKEND_API_URL = "https://api.mukasamatthew.com"
-  BACKEND_API_URL_CANONICAL = "https://api.mukasamatthew.com"
+  BACKEND_API_URL = "https://api.edu-bridge.world"
+  BACKEND_API_URL_CANONICAL = "https://api.edu-bridge.world"
   VITE_API_URL = ""
 
 # Browser uses same-origin /api only (see src/services/api/client.ts). Clear VITE_API_URL in Netlify UI if set.
