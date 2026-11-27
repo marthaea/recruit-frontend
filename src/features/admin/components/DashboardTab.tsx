@@ -1,16 +1,48 @@
 import { useRef, useState } from "react";
 import {
-  BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid,
+  BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area, CartesianGrid,
 } from "recharts";
 import {
-  Users, Briefcase, Archive, GraduationCap, CheckCircle2, Printer, Camera,
+  Users, Briefcase, Archive, GraduationCap, CheckCircle2, Printer, Camera, ChevronRight,
 } from "lucide-react";
 import {
   useApp, type Job, type Application,
 } from "@/app/providers/AppContext";
 import { cv as cvApi } from "@/services/api/client";
 import { PhotoCropModal } from "@/features/candidate/components/PhotoCropModal";
-import { AnimatedSection, STATUS_COLORS } from "./shared";
+import { AnimatedSection } from "./shared";
+
+// Dashboard-only status palette, tuned to the UCAA navy brand so the charts
+// read as one family instead of the rainbow STATUS_COLORS used elsewhere.
+// Keyed by status name (the old pie picked colours by index, so the same
+// status could change colour between loads).
+const DASH_STATUS_COLORS: Record<string, string> = {
+  Pending: "#C08A2B",
+  "Under Review": "#7C9CC6",
+  Shortlisted: "#1A4A8A",
+  "Shortlisted II": "#2F7F8F",
+  Interview: "#0B2E5F",
+  "Assessment Scheduled": "#5B79A6",
+  "Assessment Complete": "#3D628F",
+  Offered: "#1A7A4A",
+  Declined: "#C0392B",
+};
+const statusColor = (s: string) => DASH_STATUS_COLORS[s] ?? "#8C8F96";
+
+const AXIS_TICK = { fontSize: 11, fill: "#5B5F66" };
+const TOOLTIP_STYLE = {
+  contentStyle: { borderRadius: 10, border: "1px solid #E5E1D8", fontSize: 12, boxShadow: "0 8px 24px -12px rgba(11,46,95,.25)" },
+  cursor: { fill: "rgba(11,46,95,0.05)" },
+};
+
+function PanelHeading({ title, hint }: { title: string; hint?: string }) {
+  return (
+    <div className="mb-4">
+      <h3 className="font-display text-base font-semibold text-caa-body">{title}</h3>
+      {hint && <p className="text-xs text-caa-muted mt-0.5">{hint}</p>}
+    </div>
+  );
+}
 
 export function DashboardTab({ jobs, applications, isExpired, navigate, settings, auth }: any) {
   const { updatePhotoUrl, pushToast } = useApp();
@@ -37,7 +69,9 @@ export function DashboardTab({ jobs, applications, isExpired, navigate, settings
 
   const statusData = Object.entries(
     applications.reduce((acc: any, a: Application) => ({ ...acc, [a.status]: (acc[a.status] ?? 0) + 1 }), {})
-  ).map(([name, value]) => ({ name, value }));
+  )
+    .map(([name, value]) => ({ name, value: value as number }))
+    .sort((a, b) => b.value - a.value);
 
   const deptData = Array.from(new Set(jobs.map((j: Job) => j.dept))).map((dept) => ({
     dept: (dept as string).split(" ")[0],
@@ -95,105 +129,127 @@ export function DashboardTab({ jobs, applications, isExpired, navigate, settings
   };
 
   const today = new Date().toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric" });
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+
+  const kpis = [
+    { Icon: Briefcase,     label: "Active listings",     n: activeJobs.length,   tab: "jobs",    hint: "Open for applications" },
+    { Icon: Users,         label: "Total applications",  n: applications.length, tab: "apps",    hint: null },
+    { Icon: GraduationCap, label: "Intern applications", n: applications.filter((a: Application) => a.cgpa !== undefined).length, tab: "interns", hint: "With CGPA on file" },
+    { Icon: Archive,       label: "Expired listings",    n: jobs.filter(isExpired).length, tab: "jobs", hint: "Past closing date" },
+  ];
 
   return (
     <div className="space-y-5">
-      {/* Profile header — square (not circular, per earlier fix) profile photo,
-          greeting, and the day's real actions in one card instead of two bare
-          text rows. */}
-      <div className="admin-card p-5 flex items-center justify-between gap-4 flex-wrap">
-        <div className="flex items-center gap-4 min-w-0">
-          <button
-            onClick={() => setPhotoModalOpen(true)}
-            className="relative group shrink-0 focus:outline-none"
-            aria-label="Change profile photo"
-          >
-            {auth?.photoUrl ? (
-              <img
-                src={auth.photoUrl}
-                alt="Profile"
-                className="h-20 w-20 rounded-2xl object-cover border border-caa-border shadow-sm group-hover:border-caa-navy transition-colors"
-              />
-            ) : (
-              <div className="h-20 w-20 rounded-2xl bg-caa-navy/10 border border-caa-border group-hover:border-caa-navy flex items-center justify-center transition-colors">
-                <span className="text-caa-navy font-bold text-xl select-none">
-                  {auth?.firstName?.[0]}{auth?.lastName?.[0]}
-                </span>
-              </div>
-            )}
-            {/* Camera badge on hover */}
-            <span className="absolute -bottom-1 -right-1 h-7 w-7 rounded-full bg-caa-navy border-2 border-white shadow flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-              <Camera className="h-3.5 w-3.5 text-white" />
-            </span>
-          </button>
-          <div className="min-w-0">
-            <h1 className="font-bold text-2xl text-caa-body truncate">Hi {auth?.firstName ?? "there"}</h1>
-            <p className="text-xs text-caa-muted mt-0.5">{today}</p>
-          </div>
-        </div>
-        <button onClick={printCharts} className="inline-flex items-center gap-2 px-3.5 py-2 text-sm font-medium border border-caa-border rounded-xl hover:border-caa-navy hover:bg-caa-navy/5 text-caa-body transition-colors shrink-0">
-          <Printer className="h-4 w-4" /> Print charts
-        </button>
-      </div>
-
-      {/* Stat cards */}
-      <AnimatedSection data-tour="admin-stats" className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[
-          { Icon: Briefcase,     label: "Active Listings",      n: activeJobs.length,    color: "text-caa-navy",     bg: "bg-caa-navy/10",     tab: "jobs" },
-          { Icon: Users,         label: "Total Applications",   n: applications.length,  color: "text-caa-navy-2",   bg: "bg-caa-navy-2/10",   tab: "apps" },
-          { Icon: GraduationCap, label: "Intern Applications",  n: applications.filter((a: Application) => a.cgpa !== undefined).length, color: "text-caa-success", bg: "bg-caa-success/10", tab: "interns" },
-          { Icon: Archive,       label: "Expired Listings",     n: jobs.filter(isExpired).length, color: "text-caa-danger", bg: "bg-caa-danger/10", tab: "jobs" },
-        ].map((s) => (
-          <button key={s.label} onClick={() => navigate({ to: "/admin", search: { tab: s.tab } })} className="admin-card admin-card-hover p-4 text-left">
-            <div className={`h-9 w-9 rounded-full flex items-center justify-center ${s.bg}`}>
-              <s.Icon className={`h-4.5 w-4.5 ${s.color}`} />
-            </div>
-            <p className="text-[11px] text-caa-muted mt-3">{s.label}</p>
-            <p className={`font-bold text-3xl mt-1 ${s.color}`}>{s.n}</p>
-            {s.label === "Total Applications" && (
-              <span className={`inline-flex items-center gap-1 mt-2 text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                weekDelta > 0 ? "bg-caa-success/12 text-caa-success" : weekDelta < 0 ? "bg-caa-danger/12 text-caa-danger" : "bg-caa-muted/10 text-caa-muted"
-              }`}>
-                {weekDelta > 0 ? `▲ +${weekDelta}` : weekDelta < 0 ? `▼ ${weekDelta}` : "—"} vs last week
+      {/* Header band — the one bold element on the page: greeting and the four
+          headline numbers on UCAA navy. Everything below stays quiet. */}
+      <section className="caa-hero-bg rounded-[20px] overflow-hidden text-white">
+        <div className="relative p-5 sm:p-6 flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-4 min-w-0">
+            <button
+              onClick={() => setPhotoModalOpen(true)}
+              className="relative group shrink-0 rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+              aria-label="Change profile photo"
+            >
+              {auth?.photoUrl ? (
+                <img
+                  src={auth.photoUrl}
+                  alt="Profile"
+                  className="h-16 w-16 rounded-2xl object-cover ring-2 ring-white/25 group-hover:ring-white/60 transition"
+                />
+              ) : (
+                <div className="h-16 w-16 rounded-2xl bg-white/12 ring-2 ring-white/25 group-hover:ring-white/60 flex items-center justify-center transition">
+                  <span className="font-display font-bold text-xl select-none">
+                    {auth?.firstName?.[0]}{auth?.lastName?.[0]}
+                  </span>
+                </div>
+              )}
+              <span className="absolute -bottom-1 -right-1 h-6 w-6 rounded-full bg-white text-caa-navy shadow flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
+                <Camera className="h-3 w-3" />
               </span>
-            )}
+            </button>
+            <div className="min-w-0">
+              <p className="text-sm text-white/65">{greeting}, {today}</p>
+              <h1 className="font-display font-bold text-2xl sm:text-[28px] leading-tight truncate">
+                {auth?.firstName ?? "Welcome"}{auth?.lastName ? ` ${auth.lastName}` : ""}
+              </h1>
+              <p className="text-xs text-white/55 mt-0.5">Recruitment overview, Uganda Civil Aviation Authority</p>
+            </div>
+          </div>
+          <button
+            onClick={printCharts}
+            className="inline-flex items-center gap-2 px-3.5 py-2 text-sm font-medium rounded-xl border border-white/25 hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70 transition-colors shrink-0"
+          >
+            <Printer className="h-4 w-4" /> Print charts
           </button>
-        ))}
-      </AnimatedSection>
+        </div>
+
+        <div data-tour="admin-stats" className="relative grid grid-cols-2 lg:grid-cols-4 border-t border-white/12 bg-black/10">
+          {kpis.map((s, i) => (
+            <button
+              key={s.label}
+              onClick={() => navigate({ to: "/admin", search: { tab: s.tab } })}
+              className={`group text-left px-5 sm:px-6 py-4 hover:bg-white/[0.06] focus:outline-none focus-visible:bg-white/10 transition-colors
+                ${i % 2 === 1 ? "border-l border-white/12" : ""} ${i >= 2 ? "border-t lg:border-t-0 border-white/12" : ""} ${i === 2 ? "lg:border-l" : ""}`}
+            >
+              <div className="flex items-center gap-1.5 text-white/70 text-xs">
+                <s.Icon className="h-3.5 w-3.5" />
+                {s.label}
+              </div>
+              <p className="font-display font-bold text-[34px] leading-none mt-2 tabular-nums">{s.n}</p>
+              <p className="text-[11px] text-white/55 mt-2 flex items-center gap-1">
+                {s.hint ?? (
+                  <span className={weekDelta > 0 ? "text-emerald-300" : weekDelta < 0 ? "text-rose-300" : ""}>
+                    {weekDelta > 0 ? `+${weekDelta}` : weekDelta < 0 ? `${weekDelta}` : "No change"} vs last week
+                  </span>
+                )}
+                <ChevronRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </p>
+            </button>
+          ))}
+        </div>
+      </section>
 
       {/* Recruitment Funnel + Pending Actions */}
-      <AnimatedSection delay={80} className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        {/* Funnel */}
-        <div className="admin-card p-4">
-          <h3 className="text-xs font-semibold uppercase tracking-widest text-caa-navy mb-4">Recruitment Funnel</h3>
+      <AnimatedSection delay={80} className="grid grid-cols-1 lg:grid-cols-5 gap-5">
+        {/* Funnel — one navy ramp, darkest at the top of the funnel */}
+        <div className="admin-card p-5 lg:col-span-3">
+          <PanelHeading title="Recruitment funnel" hint="How far this cycle's applications have progressed" />
           {(() => {
             const stages = [
-              { label: "Total Received",  count: applications.length,                                                         color: "#0d2454" },
-              { label: "Under Review",    count: applications.filter((a: Application) => a.status !== "Pending").length,      color: "#1565C0" },
-              { label: "Shortlisted",     count: applications.filter((a: Application) => a.status === "Shortlisted").length,  color: "#7b3fb5" },
-              { label: "Interview",       count: applications.filter((a: Application) => a.status === "Interview").length,    color: "#0a7c6e" },
-              { label: "Offered",         count: applications.filter((a: Application) => a.status === "Offered").length,      color: "#2e7d32" },
+              { label: "Received",     count: applications.length,                                                        color: "#0B2E5F" },
+              { label: "Under review", count: applications.filter((a: Application) => a.status !== "Pending").length,     color: "#1A4A8A" },
+              { label: "Shortlisted",  count: applications.filter((a: Application) => a.status === "Shortlisted").length, color: "#3D6AA8" },
+              { label: "Interview",    count: applications.filter((a: Application) => a.status === "Interview").length,   color: "#6A8FC2" },
+              { label: "Offered",      count: applications.filter((a: Application) => a.status === "Offered").length,     color: "#1A7A4A" },
             ];
             const max = stages[0].count || 1;
             return (
-              <div className="space-y-2.5">
-                {stages.map((s) => (
-                  <button key={s.label} onClick={() => navigate({ to: "/admin", search: { tab: "apps" } })} className="w-full text-left group">
-                    <div className="flex items-center gap-2">
-                      <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
-                      <span className="text-[11px] text-caa-muted w-28 shrink-0 group-hover:text-caa-body transition-colors">{s.label}</span>
-                      <div className="flex-1 bg-caa-surface rounded-full overflow-hidden h-5">
-                        <div
-                          className="h-full rounded-full flex items-center justify-end pr-2 transition-all duration-500"
-                          style={{ width: `${Math.max((s.count / max) * 100, s.count > 0 ? 4 : 0)}%`, backgroundColor: s.color }}
-                        >
-                          {s.count > 0 && <span className="text-[10px] text-white font-bold">{s.count}</span>}
-                        </div>
+              <div className="space-y-3.5">
+                {stages.map((s) => {
+                  const pct = Math.round((s.count / max) * 100);
+                  return (
+                    <button
+                      key={s.label}
+                      onClick={() => navigate({ to: "/admin", search: { tab: "apps" } })}
+                      className="w-full text-left group rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-caa-navy-2/40"
+                    >
+                      <div className="flex items-baseline justify-between gap-3">
+                        <span className="text-sm text-caa-body group-hover:text-caa-navy transition-colors">{s.label}</span>
+                        <span className="text-sm tabular-nums">
+                          <span className="font-display font-semibold text-caa-body">{s.count}</span>
+                          <span className="text-caa-light ml-2 text-xs">{pct}%</span>
+                        </span>
                       </div>
-                      <span className="text-[11px] text-caa-muted w-8 text-right">{Math.round((s.count / max) * 100)}%</span>
-                    </div>
-                  </button>
-                ))}
+                      <div className="mt-1.5 h-2 rounded-full bg-caa-surface overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all duration-700"
+                          style={{ width: `${Math.max(pct, s.count > 0 ? 2 : 0)}%`, backgroundColor: s.color }}
+                        />
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             );
           })()}
@@ -220,32 +276,43 @@ export function DashboardTab({ jobs, applications, isExpired, navigate, settings
             if (diff <= 0 || diff > 3) return false;
             return applications.filter((a: Application) => a.jobId === j.id).length < 3;
           }).length;
-          const items = [
-            { count: pendingAppsCount,       label: "application" + (pendingAppsCount !== 1 ? "s" : "") + " awaiting first review", color: "text-caa-navy",   bg: "bg-caa-navy/8",     tab: "apps"      },
-            { count: stalePendingCount,      label: "application" + (stalePendingCount !== 1 ? "s" : "") + " pending review for over 7 days", color: "text-amber-700", bg: "bg-amber-50", tab: "apps"      },
-            { count: awaitingInterviewCount, label: "shortlisted candidate" + (awaitingInterviewCount !== 1 ? "s" : "") + " to invite for interview", color: "text-purple-700", bg: "bg-purple-50",  tab: "apps"      },
-            { count: closingSoonCount,       label: "vacanc" + (closingSoonCount !== 1 ? "ies" : "y") + ` closing within ${csDays} days`, color: "text-caa-danger", bg: "bg-caa-danger/8",  tab: "jobs"      },
-            { count: lowApplicantJobs,       label: "vacanc" + (lowApplicantJobs !== 1 ? "ies" : "y") + " closing in ≤3 days with fewer than 3 applicants", color: "text-caa-danger", bg: "bg-caa-danger/8", tab: "jobs" },
-          ].filter((i) => i.count > 0);
+          const TONE = {
+            info:    "bg-caa-navy-2",
+            warning: "bg-caa-warning",
+            danger:  "bg-caa-danger",
+          } as const;
+          const items: { count: number; label: string; tone: keyof typeof TONE; tab: string }[] = [
+            { count: pendingAppsCount,       label: "application" + (pendingAppsCount !== 1 ? "s" : "") + " awaiting first review", tone: "info", tab: "apps" },
+            { count: stalePendingCount,      label: "application" + (stalePendingCount !== 1 ? "s" : "") + " pending review for over 7 days", tone: "warning", tab: "apps" },
+            { count: awaitingInterviewCount, label: "shortlisted candidate" + (awaitingInterviewCount !== 1 ? "s" : "") + " to invite for interview", tone: "info", tab: "apps" },
+            { count: closingSoonCount,       label: "vacanc" + (closingSoonCount !== 1 ? "ies" : "y") + ` closing within ${csDays} days`, tone: "danger", tab: "jobs" },
+            { count: lowApplicantJobs,       label: "vacanc" + (lowApplicantJobs !== 1 ? "ies" : "y") + " closing in ≤3 days with fewer than 3 applicants", tone: "danger", tab: "jobs" },
+          ].filter((i) => i.count > 0) as any;
           return (
-            <div className="admin-card p-4">
-              <h3 className="text-xs font-semibold uppercase tracking-widest text-caa-navy mb-4">Pending Actions</h3>
+            <div className="admin-card p-5 lg:col-span-2">
+              <PanelHeading title="Needs your attention" hint={items.length ? `${items.length} item${items.length !== 1 ? "s" : ""} to action` : undefined} />
               {items.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-24 text-center">
+                <div className="flex flex-col items-center justify-center h-28 text-center">
                   <CheckCircle2 className="h-7 w-7 text-caa-success mb-2" />
                   <p className="text-sm font-semibold text-caa-body">All clear</p>
                   <p className="text-xs text-caa-muted mt-0.5">No pending actions at this time.</p>
                 </div>
               ) : (
-                <div className="space-y-2">
+                <ul className="divide-y divide-caa-border -mx-2">
                   {items.map((item) => (
-                    <button key={item.label} onClick={() => navigate({ to: "/admin", search: { tab: item.tab as any } })}
-                      className={`w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-xl ${item.bg} hover:opacity-80 transition-opacity`}>
-                      <span className={`h-9 w-9 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${item.color} bg-white/60`}>{item.count}</span>
-                      <span className={`text-xs font-medium ${item.color}`}>{item.label}</span>
-                    </button>
+                    <li key={item.label}>
+                      <button
+                        onClick={() => navigate({ to: "/admin", search: { tab: item.tab as any } })}
+                        className="w-full text-left flex items-center gap-3 px-2 py-3 rounded-lg hover:bg-caa-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-caa-navy-2/40 transition-colors group"
+                      >
+                        <span className={`h-8 w-1 rounded-full shrink-0 ${TONE[item.tone]}`} aria-hidden />
+                        <span className="font-display font-bold text-xl text-caa-body tabular-nums w-12 shrink-0">{item.count}</span>
+                        <span className="text-sm text-caa-muted leading-snug flex-1">{item.label}</span>
+                        <ChevronRight className="h-4 w-4 text-caa-light group-hover:text-caa-navy shrink-0 transition-colors" />
+                      </button>
+                    </li>
                   ))}
-                </div>
+                </ul>
               )}
             </div>
           );
@@ -255,43 +322,64 @@ export function DashboardTab({ jobs, applications, isExpired, navigate, settings
       {/* Charts grid — printable */}
       <AnimatedSection delay={160}>
       <div ref={printRef} className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        <div className="admin-card p-4">
-          <h3 className="text-xs font-semibold uppercase tracking-widest text-caa-navy mb-4">Applications by Status</h3>
-          <ResponsiveContainer width="100%" height={200}>
-            <PieChart>
-              <Pie data={statusData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={75} label={({ name, value }) => `${name}: ${value}`} labelLine={false}>
-                {statusData.map((_: any, i: number) => (
-                  <Cell key={i} fill={Object.values(STATUS_COLORS)[i % 6]} />
-                ))}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
+        <div className="admin-card card p-5">
+          <PanelHeading title="Applications by status" hint={`${applications.length} applications in total`} />
+          <div className="flex items-center gap-4 flex-wrap sm:flex-nowrap">
+            <div className="relative h-[190px] w-[190px] shrink-0 mx-auto sm:mx-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={statusData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={58} outerRadius={88} paddingAngle={1.5} stroke="none">
+                    {statusData.map((d) => (
+                      <Cell key={d.name} fill={statusColor(d.name)} />
+                    ))}
+                  </Pie>
+                  <Tooltip {...TOOLTIP_STYLE} />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                <span className="font-display font-bold text-2xl text-caa-body tabular-nums">{applications.length}</span>
+                <span className="text-[11px] text-caa-muted">applications</span>
+              </div>
+            </div>
+            <ul className="flex-1 min-w-[160px] space-y-1.5">
+              {statusData.map((d) => (
+                <li key={d.name} className="flex items-center gap-2 text-sm">
+                  <span className="h-2.5 w-2.5 rounded-sm shrink-0" style={{ backgroundColor: statusColor(d.name) }} />
+                  <span className="text-caa-body truncate flex-1">{d.name}</span>
+                  <span className="tabular-nums font-medium text-caa-body">{d.value}</span>
+                  <span className="tabular-nums text-xs text-caa-light w-9 text-right">
+                    {applications.length ? Math.round((d.value / applications.length) * 100) : 0}%
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
 
-        <div className="admin-card p-4">
-          <h3 className="text-xs font-semibold uppercase tracking-widest text-caa-navy mb-4">Applications by Department</h3>
+        <div className="admin-card card p-5">
+          <PanelHeading title="Applications by department" hint="Across all listings, open and closed" />
           <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={deptData} margin={{ left: -20 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis dataKey="dept" tick={{ fontSize: 10 }} />
-              <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
-              <Tooltip formatter={(v, _, { payload }) => [v, payload?.full]} />
-              <Bar dataKey="apps" fill="#0d2454" radius={[3, 3, 0, 0]} />
+            <BarChart data={deptData} margin={{ left: -24, right: 4, top: 4 }}>
+              <CartesianGrid vertical={false} stroke="#EEEBE4" />
+              <XAxis dataKey="dept" tick={AXIS_TICK} axisLine={false} tickLine={false} />
+              <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} allowDecimals={false} />
+              <Tooltip {...TOOLTIP_STYLE} formatter={(v, _, { payload }) => [v, payload?.full]} />
+              <Bar dataKey="apps" fill="#1A4A8A" radius={[6, 6, 0, 0]} maxBarSize={36} />
             </BarChart>
           </ResponsiveContainer>
         </div>
 
-        <div className="admin-card p-4 md:col-span-2">
-          <h3 className="text-xs font-semibold uppercase tracking-widest text-caa-navy mb-4">Application Trend (last 6 months)</h3>
-          <ResponsiveContainer width="100%" height={150}>
-            <LineChart data={trend}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
-              <Tooltip />
-              <Line type="monotone" dataKey="apps" stroke="#1565C0" strokeWidth={2} dot={{ fill: "#1565C0", r: 4 }} />
-            </LineChart>
+        <div className="admin-card card p-5 md:col-span-2">
+          <PanelHeading title="Applications over the last 6 months" />
+          <ResponsiveContainer width="100%" height={170}>
+            <AreaChart data={trend} margin={{ left: -24, right: 8, top: 4 }}>
+              <CartesianGrid vertical={false} stroke="#EEEBE4" />
+              <XAxis dataKey="month" tick={AXIS_TICK} axisLine={false} tickLine={false} />
+              <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} allowDecimals={false} />
+              <Tooltip {...TOOLTIP_STYLE} cursor={{ stroke: "#1A4A8A", strokeOpacity: 0.25 }} />
+              <Area type="monotone" dataKey="apps" stroke="#0B2E5F" strokeWidth={2.5} fill="#1A4A8A" fillOpacity={0.1}
+                dot={{ r: 3.5, fill: "#fff", stroke: "#0B2E5F", strokeWidth: 2 }} activeDot={{ r: 5 }} />
+            </AreaChart>
           </ResponsiveContainer>
         </div>
       </div>

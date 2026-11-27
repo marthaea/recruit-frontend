@@ -229,7 +229,7 @@
     box-shadow: 0 8px 24px -12px rgba(11, 46, 95, 0.18);
   }
   /* HR Console dashboard polish — a slightly softer, more lifted card than
-     the site-wide .caa-card, used only on the admin Dashboard overview so the
+     the site-wide .caa-card, used on the HR and candidate dashboards so the
      rest of the HR Console (still on .caa-card) is untouched. */
   .admin-card {
     background: #fff;
