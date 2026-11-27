@@ -45,7 +45,7 @@ export function VacanciesPage() {
         <div className="relative mx-auto max-w-7xl">
           <h1 className="font-bold text-white text-3xl md:text-4xl">Current Vacancies</h1>
           <p className="text-white/70 mt-1.5 text-sm">
-            {visible.length} positions open · Updated June 2026
+            {visible.length} {visible.length === 1 ? "position" : "positions"} open
             {auth.isLoggedIn && auth.effectiveType === "internal" && (
               <span className="ml-2 inline-block px-2 py-0.5 rounded-full bg-white/15 text-white text-[11px]">Internal access</span>
             )}
