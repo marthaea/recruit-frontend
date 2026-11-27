@@ -57,22 +57,28 @@ export function AppsTab({ jobs, applications, jobId, cvStore, updateStatus, bulk
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId, displayed.map((a: Application) => a.candidateEmail).join(',')]);
 
-  // Job-picker landing — only for the plain "Applications" entry point (no
-  // specific job, no forced status filter like Shortlisting/Interview Panel).
-  // Previously this showed every application across every job in one flat
-  // list with no way to scope down except the status pills.
-  const showJobPicker = !jobId && !initialStatusFilter && !viewingAll && !!onSelectJob;
+  // Job-picker landing when no specific job is selected. Previously this showed
+  // every application across every job in one flat list. The Shortlisting tab
+  // uses it too (and has no "view all"), because its auto-screen runs over the
+  // whole list: without a job, one click screened — and declined — candidates
+  // for every vacancy at once.
+  const isShortlistTab = mode === "shortlist" && !!initialStatusFilter;
+  const showJobPicker = !jobId && !viewingAll && !!onSelectJob;
   if (showJobPicker) {
     return (
       <div className="space-y-3">
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div>
-            <h1 className="font-bold text-xl text-caa-body">Applications</h1>
-            <p className="text-xs text-caa-muted mt-0.5">Select a vacancy to review its applications.</p>
+            <h1 className="font-bold text-xl text-caa-body">{isShortlistTab ? "Shortlisting" : "Applications"}</h1>
+            <p className="text-xs text-caa-muted mt-0.5">
+              {isShortlistTab ? "Select a vacancy to screen and shortlist its applicants." : "Select a vacancy to review its applications."}
+            </p>
           </div>
-          <button onClick={() => setViewingAll(true)} className="text-xs font-semibold text-caa-navy hover:underline">
-            View all applications across every job →
-          </button>
+          {!isShortlistTab && (
+            <button onClick={() => setViewingAll(true)} className="text-xs font-semibold text-caa-navy hover:underline">
+              View all applications across every job →
+            </button>
+          )}
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {jobs.map((j: Job) => {
@@ -296,7 +302,7 @@ export function AppsTab({ jobs, applications, jobId, cvStore, updateStatus, bulk
     <div className="space-y-3">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          {jobId && onClearJob && !initialStatusFilter && (
+          {jobId && onClearJob && (
             <button onClick={onClearJob} className="text-[11px] font-semibold text-caa-navy hover:underline mb-1 block">← All vacancies</button>
           )}
           <h1 className="font-bold text-xl text-caa-body">{job ? `Applications — ${job.title}` : "All Applications"}</h1>
@@ -472,6 +478,7 @@ export function AppsTab({ jobs, applications, jobId, cvStore, updateStatus, bulk
           { status: "Pending",      label: "Pending",      tip: "Awaiting screening" },
           { status: "Under Review", label: "Under Review", tip: "Manually flagged for review" },
           { status: "Shortlisted",  label: "Shortlisted",  tip: "Passed screening — awaiting HR approval" },
+          { status: "Shortlisted II", label: "Shortlisted II", tip: "In CV scoring by the panel" },
           { status: "Interview",    label: "Interview",    tip: "Approved for oral interview" },
           { status: "Offered",      label: "Offered",      tip: "Position offered" },
         ];
