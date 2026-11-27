@@ -5,12 +5,12 @@ import {
   LayoutGrid, List, CheckSquare, Square, Archive, CalendarClock,
 } from "lucide-react";
 import {
-  useApp, canAccess, type Job, type Application, type ApplicationStatus, type JobCriteria,
+  useApp, canAccess, type Job, type Application, type ApplicationStatus, type JobCriteria, type CvProfile,
 } from "@/app/providers/AppContext";
 import {
   downloadScreeningReport, downloadOfferLetter, downloadCandidateCv, downloadCandidateCvsZip, type ScreeningReportEntry,
 } from "@/services/documents/pdf-reports";
-import { applications as appsApi } from "@/services/api/client";
+import { applications as appsApi, cv as cvApi } from "@/services/api/client";
 import { buildEmail, autoQualify, logScreeningRun, STATUS_COLORS, fi, EmptyState, type ScreeningResult } from "./shared";
 import { AssessmentInviteModal, type InviteCandidate } from "./AssessmentInviteModal";
 
@@ -57,22 +57,28 @@ export function AppsTab({ jobs, applications, jobId, cvStore, updateStatus, bulk
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId, displayed.map((a: Application) => a.candidateEmail).join(',')]);
 
-  // Job-picker landing — only for the plain "Applications" entry point (no
-  // specific job, no forced status filter like Shortlisting/Interview Panel).
-  // Previously this showed every application across every job in one flat
-  // list with no way to scope down except the status pills.
-  const showJobPicker = !jobId && !initialStatusFilter && !viewingAll && !!onSelectJob;
+  // Job-picker landing when no specific job is selected. Previously this showed
+  // every application across every job in one flat list. The Shortlisting tab
+  // uses it too (and has no "view all"), because its auto-screen runs over the
+  // whole list: without a job, one click screened — and declined — candidates
+  // for every vacancy at once.
+  const isShortlistTab = mode === "shortlist" && !!initialStatusFilter;
+  const showJobPicker = !jobId && !viewingAll && !!onSelectJob;
   if (showJobPicker) {
     return (
       <div className="space-y-3">
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div>
-            <h1 className="font-bold text-xl text-caa-body">Applications</h1>
-            <p className="text-xs text-caa-muted mt-0.5">Select a vacancy to review its applications.</p>
+            <h1 className="font-bold text-xl text-caa-body">{isShortlistTab ? "Shortlisting" : "Applications"}</h1>
+            <p className="text-xs text-caa-muted mt-0.5">
+              {isShortlistTab ? "Select a vacancy to screen and shortlist its applicants." : "Select a vacancy to review its applications."}
+            </p>
           </div>
-          <button onClick={() => setViewingAll(true)} className="text-xs font-semibold text-caa-navy hover:underline">
-            View all applications across every job →
-          </button>
+          {!isShortlistTab && (
+            <button onClick={() => setViewingAll(true)} className="text-xs font-semibold text-caa-navy hover:underline">
+              View all applications across every job →
+            </button>
+          )}
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {jobs.map((j: Job) => {
@@ -146,20 +152,34 @@ export function AppsTab({ jobs, applications, jobId, cvStore, updateStatus, bulk
     }, 0);
   };
 
-  const runScreening = () => {
+  const runScreening = async () => {
     setIsProcessing(true);
-    setTimeout(() => {
-      const eligible = filtered.filter((a: Application) => a.status === "Pending" || a.status === "Under Review");
-      const results: ScreeningResult[] = eligible.map((a: Application) => {
-        const j = jobs.find((jj: Job) => jj.id === a.jobId);
-        const cv = cvStore[a.candidateEmail?.toLowerCase() ?? ""];
-        const c = criteria.find((cr: JobCriteria) => cr.jobId === a.jobId);
-        const { ok, checks } = autoQualify(a, j, cv, c);
-        return { app: a, ok, checks };
-      });
-      setScreeningResult({ results, confirmed: false });
-      setIsProcessing(false);
-    }, 0);
+    const eligible = filtered.filter((a: Application) => a.status === "Pending" || a.status === "Under Review");
+    // cvStore is only filled for candidates currently on screen, and this tab
+    // opens filtered to "Shortlisted" — so the Pending/Under Review candidates
+    // being screened usually had no CV loaded and ALL failed "Portal CV".
+    // Fetch every missing CV before evaluating anyone.
+    const fetched: Record<string, CvProfile> = {};
+    const missing = Array.from(new Set(
+      eligible.map((a: Application) => a.candidateEmail?.toLowerCase() ?? "").filter((e: string) => e && !cvStore[e]),
+    )) as string[];
+    for (let i = 0; i < missing.length; i += 8) {
+      await Promise.all(missing.slice(i, i + 8).map((email) =>
+        cvApi.getByEmail(email)
+          .then((r) => { if (r.success && r.data) fetched[email] = r.data as unknown as CvProfile; })
+          .catch(() => {}),
+      ));
+    }
+    const results: ScreeningResult[] = eligible.map((a: Application) => {
+      const j = jobs.find((jj: Job) => jj.id === a.jobId);
+      const key = a.candidateEmail?.toLowerCase() ?? "";
+      const cv = cvStore[key] ?? fetched[key];
+      const c = criteria.find((cr: JobCriteria) => cr.jobId === a.jobId);
+      const { ok, checks } = autoQualify(a, j, cv, c);
+      return { app: a, ok, checks };
+    });
+    setScreeningResult({ results, confirmed: false });
+    setIsProcessing(false);
   };
 
   const confirmScreening = () => {
@@ -296,7 +316,7 @@ export function AppsTab({ jobs, applications, jobId, cvStore, updateStatus, bulk
     <div className="space-y-3">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          {jobId && onClearJob && !initialStatusFilter && (
+          {jobId && onClearJob && (
             <button onClick={onClearJob} className="text-[11px] font-semibold text-caa-navy hover:underline mb-1 block">← All vacancies</button>
           )}
           <h1 className="font-bold text-xl text-caa-body">{job ? `Applications — ${job.title}` : "All Applications"}</h1>
@@ -472,6 +492,7 @@ export function AppsTab({ jobs, applications, jobId, cvStore, updateStatus, bulk
           { status: "Pending",      label: "Pending",      tip: "Awaiting screening" },
           { status: "Under Review", label: "Under Review", tip: "Manually flagged for review" },
           { status: "Shortlisted",  label: "Shortlisted",  tip: "Passed screening — awaiting HR approval" },
+          { status: "Shortlisted II", label: "Shortlisted II", tip: "In CV scoring by the panel" },
           { status: "Interview",    label: "Interview",    tip: "Approved for oral interview" },
           { status: "Offered",      label: "Offered",      tip: "Position offered" },
         ];
@@ -661,6 +682,9 @@ function AppDetailModal({ app, job, cv, criteria, canShortlist, onClose, onUpdat
 
   const actionButtons = [
     { status: "Shortlisted", label: "Shortlist",       color: "bg-caa-success text-white"  },
+    // Previously the only way to move one candidate into CV scoring was a
+    // drag on the pipeline board (or a batch from a fresh auto-screen).
+    { status: "Shortlisted II", label: "Send to Shortlisting II", color: "bg-teal-500 text-white" },
     { status: "Interview",   label: "Invite Interview", color: "bg-purple-600 text-white"   },
     { status: "Offered",     label: "Make Offer",       color: "bg-teal-600 text-white"     },
     { status: "Declined",    label: "Decline",          color: "bg-caa-danger text-white"   },

@@ -3,7 +3,7 @@ import {
   auth as authApi, jobs as jobsApi, applications as appsApi,
   notifications as notifApi, settings as settingsApi,
   cv as cvApi, criteria as criteriaApi, departments as departmentsApi, permissions as permissionsApi,
-  jobTemplates as jobTemplatesApi, analyticsApi,
+  jobTemplates as jobTemplatesApi, analyticsApi, audit as auditApi,
   setToken, restoreSession, setSessionExpiredHandler,
   type UserResponse, type Department, type AssessmentKind,
 } from "@/services/api/client";
@@ -547,6 +547,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (sessionRestoring || !auth.isLoggedIn) return;
     if (auth.accountType === "admin") {
       fetchJobsList();
+      // The shared, server-side audit trail (status changes, screening runs…)
+      // rather than only what this one browser happened to record.
+      auditApi.list({ limit: 200 }).then(r => {
+        if (r.success) setAudit((r.data as unknown as AuditEntry[]).map(({ id, at, actor, role, action, target }) => ({ id, at, actor, role, action, target })));
+      }).catch(() => {});
       notifApi.list().then(r => { if (r.success) persistNotifs(r.data as unknown as Notification[]); }).catch(() => {});
       permissionsApi.roleDefaults().then(r => { if (r.success) setRoleDefaults(r.data.defaults as Record<AdminRole, Partial<PermissionOverride>>); }).catch(() => {});
       if (auth.adminRole === "super") {
@@ -994,9 +999,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       role: auth.adminRole ?? "hr",
       action, target,
     };
-    const next = [entry, ...audit].slice(0, 200);
-    setAudit(next);
-    try { localStorage.setItem(AUDIT_KEY, JSON.stringify(next)); } catch {}
+    setAudit((prev) => {
+      const next = [entry, ...prev].slice(0, 200);
+      try { localStorage.setItem(AUDIT_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
+    // Previously browser-only, so the Audit Log was empty on any other
+    // machine or for any other HR officer. Record it server-side too.
+    if (auth.accountType === "admin") auditApi.create({ action, target }).catch(() => {});
   };
 
   const updateSettings = (p: Partial<AdminSettings>) => {

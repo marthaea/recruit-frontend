@@ -28,7 +28,8 @@ export const Route = createFileRoute("/admin")({
         "permissions",
         "administration",
       ])
-      .optional(),
+      .optional()
+      .catch(undefined),
     jobId: z.coerce.number().optional(),
   }),
   head: () => ({ meta: [{ title: "HR Console — UCAA" }] }),
