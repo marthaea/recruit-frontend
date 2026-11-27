@@ -682,6 +682,9 @@ function AppDetailModal({ app, job, cv, criteria, canShortlist, onClose, onUpdat
 
   const actionButtons = [
     { status: "Shortlisted", label: "Shortlist",       color: "bg-caa-success text-white"  },
+    // Previously the only way to move one candidate into CV scoring was a
+    // drag on the pipeline board (or a batch from a fresh auto-screen).
+    { status: "Shortlisted II", label: "Send to Shortlisting II", color: "bg-teal-500 text-white" },
     { status: "Interview",   label: "Invite Interview", color: "bg-purple-600 text-white"   },
     { status: "Offered",     label: "Make Offer",       color: "bg-teal-600 text-white"     },
     { status: "Declined",    label: "Decline",          color: "bg-caa-danger text-white"   },
