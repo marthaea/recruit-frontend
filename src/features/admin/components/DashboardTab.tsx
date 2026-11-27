@@ -129,8 +129,6 @@ export function DashboardTab({ jobs, applications, isExpired, navigate, settings
   };
 
   const today = new Date().toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric" });
-  const hour = new Date().getHours();
-  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
   const kpis = [
     { Icon: Briefcase,     label: "Active listings",     n: activeJobs.length,   tab: "jobs",    hint: "Open for applications" },
@@ -169,11 +167,8 @@ export function DashboardTab({ jobs, applications, isExpired, navigate, settings
               </span>
             </button>
             <div className="min-w-0">
-              <p className="text-sm text-white/65">{greeting}, {today}</p>
-              <h1 className="font-display font-bold text-2xl sm:text-[28px] leading-tight truncate">
-                {auth?.firstName ?? "Welcome"}{auth?.lastName ? ` ${auth.lastName}` : ""}
-              </h1>
-              <p className="text-xs text-white/55 mt-0.5">Recruitment overview, Uganda Civil Aviation Authority</p>
+              <h1 className="font-bold text-2xl text-white truncate">Hi {auth?.firstName ?? "there"}</h1>
+              <p className="text-xs text-white/65 mt-0.5">{today}</p>
             </div>
           </div>
           <button
