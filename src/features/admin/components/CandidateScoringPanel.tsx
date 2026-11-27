@@ -4,7 +4,7 @@ import { useApp, type Job, type Application, type JobCriteria } from "@/app/prov
 import { candidateScores as scoresApi, type CandidateScoreSummary } from "@/services/api/client";
 import { downloadCandidateCv } from "@/services/documents/pdf-reports";
 import { downloadCsv } from "@/utils/csv-export";
-import { fi } from "./shared";
+import { fi, logScreeningRun } from "./shared";
 import { AssessmentInviteModal, type InviteCandidate } from "./AssessmentInviteModal";
 
 // Shortlisted II is the CV-scoring stage: multiple admins/panelists each
@@ -102,10 +102,27 @@ export function CandidateScoringPanel({ jobs, applications, jobId, cvStore, acto
     if (scored.length === 0) return;
     const advance = scored.filter((r) => (r.average ?? 0) >= threshold);
     const decline = scored.filter((r) => (r.average ?? 0) < threshold);
+    if (decline.length > 0 && !window.confirm(
+      `Auto-shortlist at ≥${threshold}: ${advance.length} will advance and ${decline.length} will be DECLINED. Continue?`,
+    )) return;
     if (decline.length > 0) {
       bulkUpdateStatus(decline.map((r) => ({ id: r.applicationId, status: "Declined" as const })));
     }
     logAction(`Auto-shortlisted by score (≥${threshold}) — ${advance.length} ready for assessment, ${decline.length} declined`, job?.title);
+    // Record the run so it shows up in Shortlisting Reports, like the
+    // Applications and Interns (CGPA) screenings already do.
+    const toAudit = (r: CandidateScoreSummary, decision: "Shortlisted" | "Declined") => ({
+      id: r.applicationId, name: r.candidateName, email: r.candidateEmail, jobId, jobTitle: job?.title,
+      decision,
+      reasons: [`Average score ${r.average?.toFixed(1)} ${decision === "Shortlisted" ? "meets" : "below"} threshold ${threshold}`],
+    });
+    logScreeningRun({
+      action: "Ran score-based auto-shortlist",
+      jobId,
+      jobTitle: job?.title,
+      threshold: { minAverageScore: threshold },
+      candidates: [...advance.map((r) => toAudit(r, "Shortlisted")), ...decline.map((r) => toAudit(r, "Declined"))],
+    });
     if (advance.length > 0) {
       pushToast({ type: "success", title: "Auto-shortlist applied", message: `${advance.length} candidate${advance.length !== 1 ? "s" : ""} cleared the threshold — pick an assessment to invite them.` });
       setInviteCandidates(advance.map((r) => ({ applicationId: r.applicationId, candidateName: r.candidateName, candidateEmail: r.candidateEmail })));

@@ -12,7 +12,7 @@ export const Route = createFileRoute("/vacancies")({
       { property: "og:title", content: "Current Vacancies — UCAA" },
       {
         property: "og:description",
-        content: "12 positions open across Air Traffic, Safety, Finance, ICT and Legal.",
+        content: "Open positions across Air Traffic, Safety, Finance, ICT and Legal.",
       },
     ],
   }),
