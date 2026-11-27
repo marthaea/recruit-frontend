@@ -5,12 +5,12 @@ import {
   LayoutGrid, List, CheckSquare, Square, Archive, CalendarClock,
 } from "lucide-react";
 import {
-  useApp, canAccess, type Job, type Application, type ApplicationStatus, type JobCriteria,
+  useApp, canAccess, type Job, type Application, type ApplicationStatus, type JobCriteria, type CvProfile,
 } from "@/app/providers/AppContext";
 import {
   downloadScreeningReport, downloadOfferLetter, downloadCandidateCv, downloadCandidateCvsZip, type ScreeningReportEntry,
 } from "@/services/documents/pdf-reports";
-import { applications as appsApi } from "@/services/api/client";
+import { applications as appsApi, cv as cvApi } from "@/services/api/client";
 import { buildEmail, autoQualify, logScreeningRun, STATUS_COLORS, fi, EmptyState, type ScreeningResult } from "./shared";
 import { AssessmentInviteModal, type InviteCandidate } from "./AssessmentInviteModal";
 
@@ -152,20 +152,34 @@ export function AppsTab({ jobs, applications, jobId, cvStore, updateStatus, bulk
     }, 0);
   };
 
-  const runScreening = () => {
+  const runScreening = async () => {
     setIsProcessing(true);
-    setTimeout(() => {
-      const eligible = filtered.filter((a: Application) => a.status === "Pending" || a.status === "Under Review");
-      const results: ScreeningResult[] = eligible.map((a: Application) => {
-        const j = jobs.find((jj: Job) => jj.id === a.jobId);
-        const cv = cvStore[a.candidateEmail?.toLowerCase() ?? ""];
-        const c = criteria.find((cr: JobCriteria) => cr.jobId === a.jobId);
-        const { ok, checks } = autoQualify(a, j, cv, c);
-        return { app: a, ok, checks };
-      });
-      setScreeningResult({ results, confirmed: false });
-      setIsProcessing(false);
-    }, 0);
+    const eligible = filtered.filter((a: Application) => a.status === "Pending" || a.status === "Under Review");
+    // cvStore is only filled for candidates currently on screen, and this tab
+    // opens filtered to "Shortlisted" — so the Pending/Under Review candidates
+    // being screened usually had no CV loaded and ALL failed "Portal CV".
+    // Fetch every missing CV before evaluating anyone.
+    const fetched: Record<string, CvProfile> = {};
+    const missing = Array.from(new Set(
+      eligible.map((a: Application) => a.candidateEmail?.toLowerCase() ?? "").filter((e: string) => e && !cvStore[e]),
+    )) as string[];
+    for (let i = 0; i < missing.length; i += 8) {
+      await Promise.all(missing.slice(i, i + 8).map((email) =>
+        cvApi.getByEmail(email)
+          .then((r) => { if (r.success && r.data) fetched[email] = r.data as unknown as CvProfile; })
+          .catch(() => {}),
+      ));
+    }
+    const results: ScreeningResult[] = eligible.map((a: Application) => {
+      const j = jobs.find((jj: Job) => jj.id === a.jobId);
+      const key = a.candidateEmail?.toLowerCase() ?? "";
+      const cv = cvStore[key] ?? fetched[key];
+      const c = criteria.find((cr: JobCriteria) => cr.jobId === a.jobId);
+      const { ok, checks } = autoQualify(a, j, cv, c);
+      return { app: a, ok, checks };
+    });
+    setScreeningResult({ results, confirmed: false });
+    setIsProcessing(false);
   };
 
   const confirmScreening = () => {
