@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { Check, Circle, Bell, FileText, Eye, Users, Award, Mail, Pencil, X, UserCog, Download, Camera } from "lucide-react";
+import { Check, Circle, Bell, FileText, Eye, Users, Award, Mail, Pencil, X, UserCog, Download, Camera, ChevronDown } from "lucide-react";
 import { useApp, canWithdraw, canEditApplication, type Application, type CvProfile } from "@/app/providers/AppContext";
 import { downloadApplicationSummary } from "@/services/documents/pdf-reports";
 import { PhotoCropModal } from "@/features/candidate/components/PhotoCropModal";
@@ -113,6 +113,7 @@ export function DashboardPage() {
   const [confirmId, setConfirmId] = useState<number | null>(null);
   const [editProfile, setEditProfile] = useState(false);
   const [photoModalOpen, setPhotoModalOpen] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
   const [pf, setPf] = useState({ firstName: auth.firstName, lastName: auth.lastName, email: auth.email });
 
   useEffect(() => {
@@ -225,7 +226,7 @@ export function DashboardPage() {
 
   return (
     <>
-      <div className="caa-hero-bg pt-10 px-4 sm:px-6">
+      <div className="caa-hero-bg py-10 px-4 sm:px-6">
         <div className="relative mx-auto max-w-7xl flex flex-wrap items-center justify-between gap-4">
           {/* Left: avatar + greeting */}
           <div className="flex items-center gap-4">
@@ -239,11 +240,11 @@ export function DashboardPage() {
                 <img
                   src={auth.photoUrl}
                   alt="Profile"
-                  className="h-16 w-16 rounded-2xl object-cover ring-2 ring-white/25 group-hover:ring-white/60 transition"
+                  className="h-16 w-16 rounded-full object-cover border-2 border-white/40 group-hover:border-white transition-colors shadow-md"
                 />
               ) : (
-                <div className="h-16 w-16 rounded-2xl bg-white/12 ring-2 ring-white/25 group-hover:ring-white/60 transition flex items-center justify-center">
-                  <span className="text-white font-display font-bold text-xl select-none">
+                <div className="h-16 w-16 rounded-full bg-white/20 border-2 border-white/30 group-hover:bg-white/30 transition-colors flex items-center justify-center shadow-md">
+                  <span className="text-white font-bold text-xl select-none">
                     {auth.firstName?.[0]}{auth.lastName?.[0]}
                   </span>
                 </div>
@@ -257,48 +258,34 @@ export function DashboardPage() {
             {/* Greeting text + live clock */}
             <div>
               <p className="text-white/65 text-sm">
-                {greeting}, {dateStr}
+                {greeting} 👋 &nbsp;·&nbsp; {dateStr}
               </p>
-              <h1 className="font-display font-bold text-white text-3xl md:text-4xl leading-tight mt-0.5">
+              <h1 className="font-bold text-white text-3xl md:text-4xl mt-0.5">
                 {auth.firstName} {auth.lastName}
               </h1>
-              <p className="text-white/50 text-xs mt-1 tabular-nums">{timeStr}</p>
+              <p className="text-white/45 text-sm mt-1 font-mono tracking-wide">{timeStr}</p>
             </div>
           </div>
 
           {/* Right: action buttons */}
-          <div className="flex flex-wrap gap-2.5">
-            <Link to="/vacancies" data-tour="browse-vacancies" className="px-4 py-2.5 text-sm border border-white/25 text-white rounded-xl hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70 transition-colors">
-              Browse vacancies
+          <div className="flex gap-3">
+            <Link to="/vacancies" data-tour="browse-vacancies" className="px-4 py-2.5 text-sm border border-white/30 text-white rounded-md hover:bg-white/10 transition-colors">
+              Browse Vacancies
             </Link>
             <button
               onClick={tour.restart}
               title="Take a tour of your dashboard"
-              className="px-4 py-2.5 text-sm border border-white/25 text-white rounded-xl hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70 transition-colors"
+              className="px-4 py-2.5 text-sm border border-white/30 text-white rounded-md hover:bg-white/10 transition-colors"
             >
               Take a tour
             </button>
             <button
               onClick={() => setEditProfile(true)}
-              className="px-4 py-2.5 text-sm bg-white text-caa-navy font-semibold rounded-xl hover:bg-caa-gold-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70 transition-colors inline-flex items-center gap-2"
+              className="px-4 py-2.5 text-sm bg-white text-caa-navy font-semibold rounded-md hover:bg-caa-surface transition-colors inline-flex items-center gap-2"
             >
-              <UserCog className="h-4 w-4" /> Edit profile
+              <UserCog className="h-4 w-4" /> Edit Profile
             </button>
           </div>
-        </div>
-
-        {/* Headline numbers sit inside the navy band, same as the HR Console */}
-        <div data-tour="stats" className="relative mx-auto max-w-7xl mt-8 grid grid-cols-3 border-t border-white/12">
-          {[
-            { l: "Applications submitted", n: myApplications.length },
-            { l: "Shortlisted", n: myApplications.filter((a) => (PIPE_INDEX[a.status] ?? -1) >= 1).length },
-            { l: "Offers received", n: myApplications.filter((a) => a.status === "Offered").length },
-          ].map((m, i) => (
-            <div key={m.l} className={`py-5 ${i > 0 ? "pl-5 sm:pl-8 border-l border-white/12" : ""}`}>
-              <p className="text-xs text-white/65">{m.l}</p>
-              <p className="font-display font-bold text-white text-3xl sm:text-4xl leading-none mt-2 tabular-nums">{m.n}</p>
-            </div>
-          ))}
         </div>
       </div>
 
@@ -308,20 +295,32 @@ export function DashboardPage() {
           <div className="lg:col-span-2 space-y-5">
             {/* In-app notifications */}
             {notifications.filter((n) => n.recipientEmail === auth.email?.toLowerCase()).length > 0 && (
-              <div className="admin-card p-0 overflow-hidden">
-                <div className="flex items-center gap-2 px-4 py-3 border-b border-caa-border bg-caa-navy/4">
+              <div className="caa-card p-0 overflow-hidden">
+                {/* Collapsed by default: only the newest notification shows, in
+                    one line, so the panel no longer pushes the dashboard down.
+                    The candidate expands it whenever they want the full list. */}
+                <button
+                  type="button"
+                  onClick={() => setNotifOpen((o) => !o)}
+                  aria-expanded={notifOpen}
+                  className="w-full flex items-center gap-2 px-4 py-3 border-b border-caa-border bg-caa-navy/4 text-left hover:bg-caa-navy/8 transition-colors"
+                >
                   <Bell className="h-4 w-4 text-caa-navy" />
                   <h3 className="font-semibold text-sm text-caa-body">Notifications from UCAA HR</h3>
                   <span className="ml-auto text-[11px] text-caa-muted">{notifications.filter((n) => n.recipientEmail === auth.email?.toLowerCase() && !n.read).length} unread</span>
-                </div>
-                <div className="divide-y divide-caa-border">
-                  {notifications.filter((n) => n.recipientEmail === auth.email?.toLowerCase()).slice(0, 5).map((n) => (
+                  <span className="text-[11px] font-medium text-caa-navy inline-flex items-center gap-0.5">
+                    {notifOpen ? "Show less" : `Show all (${notifications.filter((n) => n.recipientEmail === auth.email?.toLowerCase()).length})`}
+                    <ChevronDown className={`h-3.5 w-3.5 transition-transform ${notifOpen ? "rotate-180" : ""}`} />
+                  </span>
+                </button>
+                <div className={`divide-y divide-caa-border ${notifOpen ? "max-h-96 overflow-y-auto" : ""}`}>
+                  {notifications.filter((n) => n.recipientEmail === auth.email?.toLowerCase()).slice(0, notifOpen ? undefined : 1).map((n) => (
                     <div key={n.id} className={`px-4 py-3 flex items-start gap-3 ${n.read ? "opacity-60" : ""}`}>
                       <span className="text-lg shrink-0">{NOTIF_ICON[n.type] ?? "ℹ️"}</span>
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-semibold text-caa-body">{n.title}</p>
-                        <p className="text-xs text-caa-muted mt-0.5 leading-relaxed">{n.message}</p>
-                        <p className="text-[10px] text-caa-muted mt-1">{new Date(n.at).toLocaleString()}</p>
+                        <p className={`text-xs text-caa-muted mt-0.5 leading-relaxed ${notifOpen ? "" : "truncate"}`}>{n.message}</p>
+                        {notifOpen && <p className="text-[10px] text-caa-muted mt-1">{new Date(n.at).toLocaleString()}</p>}
                       </div>
                       {!n.read && (
                         <button onClick={() => markNotificationRead(n.id)} className="shrink-0 text-[11px] text-caa-navy hover:underline">Mark read</button>
@@ -333,8 +332,8 @@ export function DashboardPage() {
             )}
 
             {/* Email notice */}
-            <div className="rounded-[18px] border border-caa-navy-2/15 bg-caa-gold-2/60 p-4 flex items-start gap-3">
-              <span className="h-9 w-9 rounded-xl bg-white text-caa-navy flex items-center justify-center shrink-0">
+            <div className="caa-card p-4 flex items-start gap-3 border-l-[3px] border-l-caa-navy">
+              <span className="h-9 w-9 rounded-full bg-caa-surface text-caa-navy flex items-center justify-center shrink-0">
                 <Mail className="h-4 w-4" />
               </span>
               <div className="text-sm">
@@ -346,12 +345,23 @@ export function DashboardPage() {
               </div>
             </div>
 
-            <div data-tour="applications" className="admin-card p-0 overflow-hidden">
-              <div className="flex items-end justify-between gap-3 flex-wrap px-5 py-4 border-b border-caa-border">
-                <div>
-                  <h3 className="font-display font-semibold text-lg text-caa-body">My applications</h3>
-                  <p className="text-xs text-caa-muted mt-0.5">Edit or withdraw while an application is still early in review</p>
+            <div data-tour="stats" className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+              {[
+                { l: "Applications Submitted", n: myApplications.length, color: "text-caa-navy" },
+                { l: "Shortlisted", n: myApplications.filter((a) => (PIPE_INDEX[a.status] ?? -1) >= 1).length, color: "text-caa-navy-2" },
+                { l: "Offers Received", n: myApplications.filter((a) => a.status === "Offered").length, color: "text-caa-success" },
+              ].map((m) => (
+                <div key={m.l} className="caa-card p-5">
+                  <p className="text-xs text-caa-muted">{m.l}</p>
+                  <p className={`font-bold text-4xl mt-2 ${m.color}`}>{m.n}</p>
                 </div>
+              ))}
+            </div>
+
+            <div data-tour="applications" className="caa-card p-0 overflow-hidden">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-caa-border">
+                <h3 className="font-bold text-lg text-caa-body">My Applications</h3>
+                <span className="text-xs text-caa-muted">Edit or withdraw any active application</span>
               </div>
               <div className="divide-y divide-caa-border">
                 {myApplications.length === 0 && (
@@ -360,14 +370,14 @@ export function DashboardPage() {
                   </div>
                 )}
                 {myApplications.map((a) => (
-                  <div key={a.id} className="px-5 py-5 flex flex-col sm:flex-row sm:items-center gap-4 hover:bg-caa-surface/50 transition-colors">
+                  <div key={a.id} className="px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-4">
                     <div className="flex items-center gap-4 flex-1 min-w-0">
-                    <span className="h-11 w-11 rounded-xl bg-caa-navy text-white font-display text-xs font-bold flex items-center justify-center shrink-0">
+                    <span className="h-10 w-10 rounded-full bg-caa-surface text-caa-navy text-xs font-semibold flex items-center justify-center shrink-0">
                       {a.abbr}
                     </span>
                     <div className="flex-1 min-w-0">
-                      <p className="text-[15px] font-semibold text-caa-body truncate">{a.title}</p>
-                      <p className="text-xs text-caa-muted mt-0.5">{a.dept}, applied {a.date}</p>
+                      <p className="text-sm font-medium text-caa-body truncate">{a.title}</p>
+                      <p className="text-xs text-caa-muted mt-0.5">{a.dept} · Applied {a.date}</p>
                       <div className="mt-2 flex items-center gap-2">
                         <div className="h-1.5 w-32 bg-caa-surface rounded-full overflow-hidden">
                           <div
@@ -390,13 +400,13 @@ export function DashboardPage() {
                         {canEditApplication(a.status) ? (
                           <button
                             onClick={() => handleEdit(a)}
-                            className="px-2.5 py-1.5 text-xs border border-caa-border text-caa-navy rounded-lg hover:border-caa-navy hover:bg-caa-surface inline-flex items-center gap-1"
+                            className="px-2.5 py-1.5 text-xs border border-caa-border text-caa-navy rounded-md hover:border-caa-navy hover:bg-caa-surface inline-flex items-center gap-1"
                           >
                             <Pencil className="h-3 w-3" /> Edit
                           </button>
                         ) : (
                           <span
-                            className="px-2.5 py-1.5 text-xs border border-caa-border text-caa-muted/70 rounded-lg inline-flex items-center gap-1 cursor-not-allowed"
+                            className="px-2.5 py-1.5 text-xs border border-caa-border text-caa-muted/70 rounded-md inline-flex items-center gap-1 cursor-not-allowed"
                             title="Applications can no longer be edited once shortlisted"
                           >
                             <Pencil className="h-3 w-3" /> Edit
@@ -408,7 +418,7 @@ export function DashboardPage() {
                             downloadApplicationSummary(a, `${auth.firstName} ${auth.lastName}`, auth.email, job);
                             pushToast({ type: "success", title: "PDF downloaded", message: `Application summary for ${a.title}` });
                           }}
-                          className="px-2.5 py-1.5 text-xs border border-caa-border text-caa-navy rounded-lg hover:border-caa-navy hover:bg-caa-surface inline-flex items-center gap-1"
+                          className="px-2.5 py-1.5 text-xs border border-caa-border text-caa-navy rounded-md hover:border-caa-navy hover:bg-caa-surface inline-flex items-center gap-1"
                           title="Download application summary PDF"
                         >
                           <Download className="h-3 w-3" /> PDF
@@ -416,13 +426,13 @@ export function DashboardPage() {
                         {canWithdraw(a.status) ? (
                           <button
                             onClick={() => setConfirmId(a.id)}
-                            className="px-2.5 py-1.5 text-xs border border-caa-danger/40 text-caa-danger rounded-lg hover:bg-caa-danger/5 inline-flex items-center gap-1"
+                            className="px-2.5 py-1.5 text-xs border border-caa-danger/40 text-caa-danger rounded-md hover:bg-caa-danger/5 inline-flex items-center gap-1"
                           >
                             <X className="h-3 w-3" /> Withdraw
                           </button>
                         ) : (
                           <span
-                            className="px-2.5 py-1.5 text-xs border border-caa-border text-caa-muted/70 rounded-lg inline-flex items-center gap-1 cursor-not-allowed"
+                            className="px-2.5 py-1.5 text-xs border border-caa-border text-caa-muted/70 rounded-md inline-flex items-center gap-1 cursor-not-allowed"
                             title="Applications can no longer be withdrawn once shortlisted"
                           >
                             <X className="h-3 w-3" /> Withdraw
@@ -438,11 +448,11 @@ export function DashboardPage() {
 
           {/* Right col */}
           <div className="space-y-5">
-            <div data-tour="profile-completion" className="admin-card p-5">
-              <h3 className="font-display font-semibold text-base text-caa-body">Profile completion</h3>
+            <div data-tour="profile-completion" className="caa-card p-5">
+              <h3 className="font-bold text-base text-caa-body">Profile Completion</h3>
               <div className="mt-3 h-2 bg-caa-surface rounded-full overflow-hidden">
                 <div
-                  className={`h-full transition-all duration-500 ${completionPct === 100 ? "bg-caa-success" : "bg-caa-navy"}`}
+                  className={`h-full transition-all duration-500 ${completionPct === 100 ? "bg-caa-success" : "bg-gradient-to-r from-caa-navy to-caa-navy-2"}`}
                   style={{ width: `${completionPct}%` }}
                 />
               </div>
@@ -481,10 +491,10 @@ export function DashboardPage() {
               </ul>
             </div>
 
-            <div className="admin-card p-5">
+            <div className="caa-card p-5">
               <div className="flex items-center gap-2">
                 <Bell className="h-4 w-4 text-caa-navy" />
-                <h3 className="font-display font-semibold text-base text-caa-body">Notifications</h3>
+                <h3 className="font-bold text-base text-caa-body">Notifications</h3>
               </div>
               {(() => {
                 const myNotifs = notifications.filter((n) => n.recipientEmail === auth.email?.toLowerCase());
@@ -492,20 +502,33 @@ export function DashboardPage() {
                   return <p className="text-sm text-caa-muted mt-3">No notifications at this time.</p>;
                 }
                 return (
-                  <div className="mt-3 space-y-3">
-                    {myNotifs.slice(0, 5).map((n) => (
-                      <div key={n.id} className={`border-l-2 pl-3 py-1 ${n.read ? "border-caa-border" : "border-caa-navy-2"}`}>
-                        <p className="text-sm font-medium text-caa-body">{n.title}</p>
-                        <p className="text-xs text-caa-muted mt-0.5">{n.message}</p>
-                      </div>
-                    ))}
-                  </div>
+                  <>
+                    <div className={`mt-3 space-y-3 ${notifOpen ? "max-h-96 overflow-y-auto pr-1" : ""}`}>
+                      {myNotifs.slice(0, notifOpen ? undefined : 2).map((n) => (
+                        <div key={n.id} className={`border-l-2 pl-3 py-1 ${n.read ? "border-caa-border" : "border-caa-navy-2"}`}>
+                          <p className="text-sm font-medium text-caa-body">{n.title}</p>
+                          <p className={`text-xs text-caa-muted mt-0.5 ${notifOpen ? "" : "line-clamp-2"}`}>{n.message}</p>
+                        </div>
+                      ))}
+                    </div>
+                    {myNotifs.length > 2 && (
+                      <button
+                        type="button"
+                        onClick={() => setNotifOpen((o) => !o)}
+                        aria-expanded={notifOpen}
+                        className="mt-3 text-xs font-medium text-caa-navy hover:underline inline-flex items-center gap-0.5"
+                      >
+                        {notifOpen ? "Show less" : `Show all ${myNotifs.length}`}
+                        <ChevronDown className={`h-3.5 w-3.5 transition-transform ${notifOpen ? "rotate-180" : ""}`} />
+                      </button>
+                    )}
+                  </>
                 );
               })()}
             </div>
 
-            <div className="admin-card p-5">
-              <h3 className="font-display font-semibold text-base text-caa-body">Application timeline</h3>
+            <div className="caa-card p-5">
+              <h3 className="font-bold text-base text-caa-body">Application Timeline</h3>
               {myApplications.length === 0 ? (
                 <p className="text-sm text-caa-muted mt-3">
                   Your application journey will appear here once you apply. <Link to="/vacancies" className="text-caa-navy hover:text-caa-gold underline">Browse vacancies</Link> to get started.
