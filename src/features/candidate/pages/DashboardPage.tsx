@@ -335,7 +335,7 @@ export function DashboardPage() {
             <div data-tour="stats" className="grid grid-cols-1 sm:grid-cols-3 gap-5">
               {[
                 { l: "Applications Submitted", n: myApplications.length, color: "text-caa-navy" },
-                { l: "Shortlisted", n: myApplications.filter((a) => a.status === "Shortlisted").length, color: "text-caa-navy-2" },
+                { l: "Shortlisted", n: myApplications.filter((a) => (PIPE_INDEX[a.status] ?? -1) >= 1).length, color: "text-caa-navy-2" },
                 { l: "Offers Received", n: myApplications.filter((a) => a.status === "Offered").length, color: "text-caa-success" },
               ].map((m) => (
                 <div key={m.l} className="caa-card p-5">
