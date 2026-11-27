@@ -806,11 +806,191 @@ function findJobByTitle(qWords: string[], jobs: Job[]): Job | null {
   return best;
 }
 
+// ── Uganda public holidays ────────────────────────────────────────────────────
+// Fixed dates from the Public Holidays Act (Cap. 255, as amended). Easter is
+// computed. The two Eid holidays follow the lunar calendar and are confirmed
+// each year by the Uganda Muslim Supreme Council, so those are expected dates.
+type Holiday = { date: Date; name: string; expected?: boolean };
+
+function easterSunday(year: number): Date {
+  // Anonymous Gregorian algorithm (Meeus/Jones/Butcher)
+  const a = year % 19, b = Math.floor(year / 100), c = year % 100;
+  const d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31), day = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(year, month - 1, day);
+}
+
+const EID_EXPECTED: Record<number, { fitr: [number, number]; adha: [number, number] }> = {
+  2026: { fitr: [3, 20], adha: [5, 27] },
+  2027: { fitr: [3, 10], adha: [5, 17] },
+  2028: { fitr: [2, 27], adha: [5, 5] },
+};
+
+function ugandaHolidays(year: number): Holiday[] {
+  const d = (m: number, day: number) => new Date(year, m - 1, day);
+  const easter = easterSunday(year);
+  const goodFriday = new Date(easter); goodFriday.setDate(easter.getDate() - 2);
+  const easterMonday = new Date(easter); easterMonday.setDate(easter.getDate() + 1);
+  const list: Holiday[] = [
+    { date: d(1, 1), name: "New Year's Day" },
+    { date: d(1, 26), name: "NRM Liberation Day" },
+    { date: d(2, 16), name: "Archbishop Janani Luwum Day" },
+    { date: d(3, 8), name: "International Women's Day" },
+    { date: goodFriday, name: "Good Friday" },
+    { date: easterMonday, name: "Easter Monday" },
+    { date: d(5, 1), name: "Labour Day" },
+    { date: d(6, 3), name: "Uganda Martyrs' Day" },
+    { date: d(6, 9), name: "National Heroes' Day" },
+    { date: d(10, 9), name: "Independence Day" },
+    { date: d(12, 25), name: "Christmas Day" },
+    { date: d(12, 26), name: "Boxing Day" },
+  ];
+  const eid = EID_EXPECTED[year];
+  if (eid) {
+    list.push({ date: d(...eid.fitr), name: "Eid al-Fitr", expected: true });
+    list.push({ date: d(...eid.adha), name: "Eid al-Adha", expected: true });
+  }
+  return list.sort((x, y) => x.date.getTime() - y.date.getTime());
+}
+
+function upcomingHolidays(count: number): Holiday[] {
+  const today = dayStart();
+  const y = today.getFullYear();
+  return [...ugandaHolidays(y), ...ugandaHolidays(y + 1)].filter((h) => h.date >= today).slice(0, count);
+}
+
+const fmtDay = (dt: Date) => dt.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+const daysFromToday = (dt: Date) => Math.round((dt.getTime() - dayStart().getTime()) / 86400000);
+const holidayLine = (h: Holiday) =>
+  `• ${h.name} — ${fmtDay(h.date)}${h.expected ? " (expected; confirmed by the Uganda Muslim Supreme Council)" : ""}`;
+
+// HR-facing data questions. Shown as starter chips for admins and answered
+// from live data by resolveLive (which runs before FAQ matching).
+const HR_Q_ATTENTION = "What needs my attention today?";
+const HR_Q_SHORTLIST = "What is the status of the shortlisted candidates?";
+const HR_Q_CLOSING = "Which vacancies close soonest?";
+const HR_Q_HOLIDAY = "When is the next public holiday?";
+const hrApplicantsQ = (title: string) => `How many people applied for ${title}?`;
+
+/** Job with the most applications — used to make a realistic example chip. */
+function busiestJobTitle(jobs: Job[], apps: Application[]): string | null {
+  let best: Job | null = null, bestN = 0;
+  for (const j of jobs) {
+    const n = apps.filter((a) => a.jobId === j.id).length;
+    if (n > bestN) { best = j; bestN = n; }
+  }
+  return best?.title ?? null;
+}
+
+function adminTopics(jobs: Job[], apps: Application[]): string[] {
+  const busiest = busiestJobTitle(jobs, apps);
+  return [HR_Q_ATTENTION, HR_Q_SHORTLIST, ...(busiest ? [hrApplicantsQ(busiest)] : []), HR_Q_CLOSING, HR_Q_HOLIDAY];
+}
+
+const SHORTLIST_STAGES: { status: Application["status"]; label: string }[] = [
+  { status: "Shortlisted", label: "Shortlisted — awaiting HR approval for interview" },
+  { status: "Shortlisted II", label: "Shortlisted II — in panel CV scoring" },
+  { status: "Interview", label: "Approved for oral interview" },
+  { status: "Assessment Scheduled", label: "Assessment scheduled" },
+  { status: "Assessment Complete", label: "Assessment complete" },
+];
+
+function countBy<T>(items: T[], key: (t: T) => string): Map<string, number> {
+  const m = new Map<string, number>();
+  for (const it of items) m.set(key(it), (m.get(key(it)) ?? 0) + 1);
+  return m;
+}
+
 function resolveLive(query: string, ctx: LiveCtx): BotReply | null {
   const qn = normalize(query);
   const qWords = qn.split(" ").filter((w) => !STOP_WORDS.has(w));
   const isAdmin = ADMIN_PERSONAS.includes(ctx.persona);
   const mentionsJobs = /\b(job|jobs|listing|listings|vacanc\w*|position|positions|opening|openings|role|roles|opportunit\w*)\b/.test(qn);
+  const hrFollowUps = adminTopics(ctx.jobs, ctx.applications).filter((t) => t.toLowerCase() !== query.trim().toLowerCase()).slice(0, 3);
+
+  // Anyone: Uganda public holidays
+  if (/\b(holiday|holidays|day off|days off)\b/.test(qn)) {
+    const next = upcomingHolidays(4);
+    if (next.length === 0) return null;
+    const [first, ...rest] = next;
+    const n = daysFromToday(first.date);
+    const inDays = n === 0 ? "that's today!" : n === 1 ? "that's tomorrow." : `that's in ${n} days.`;
+    const hrTip = isAdmin ? "\n\nTip: avoid scheduling interviews or assessments on these dates." : "";
+    return {
+      text: `The next public holiday in Uganda is ${first.name} — ${fmtDay(first.date)}; ${inDays}${first.expected ? " (Expected date — confirmed each year by the Uganda Muslim Supreme Council.)" : ""}\n\nAfter that:\n${rest.map(holidayLine).join("\n")}${hrTip}`,
+      followUps: isAdmin ? hrFollowUps : ["How can I find available jobs?", "How do I apply for a job?"],
+      outcome: "answered", matched: "[live] public holidays",
+    };
+  }
+
+  // Admin: daily summary of what needs action
+  if (isAdmin && /\b(attention|to do|todo|priorit\w*|urgent|summary|overview|pending tasks?)\b/.test(qn) && !/\bholiday/.test(qn)) {
+    const apps = ctx.applications;
+    const unscreened = apps.filter((a) => a.status === "Pending" || a.status === "Under Review").length;
+    const awaitingApproval = apps.filter((a) => a.status === "Shortlisted").length;
+    const inScoring = apps.filter((a) => a.status === "Shortlisted II").length;
+    const closingWeek = openJobsFor(ctx).filter((j) => daysUntil(j.closesAt) <= 7);
+    const jobsPending = ctx.jobs.filter((j) => j.status === "pending_review" || j.status === "pending_approval").length;
+    const holiday = upcomingHolidays(1)[0];
+    const lines = [
+      `• ${unscreened} application${unscreened === 1 ? "" : "s"} not yet screened (Pending / Under Review)`,
+      `• ${awaitingApproval} shortlisted candidate${awaitingApproval === 1 ? "" : "s"} awaiting your approval for interview`,
+      `• ${inScoring} candidate${inScoring === 1 ? "" : "s"} in Shortlisting II panel scoring`,
+      `• ${jobsPending} job${jobsPending === 1 ? "" : "s"} awaiting review or approval before publishing`,
+      closingWeek.length > 0
+        ? `• ${closingWeek.length} vacanc${closingWeek.length === 1 ? "y closes" : "ies close"} within 7 days: ${closingWeek.map((j) => j.title).join(", ")}`
+        : "• No vacancies close in the next 7 days",
+    ];
+    if (holiday && daysFromToday(holiday.date) <= 14) lines.push(`• Public holiday coming up: ${holiday.name}, ${fmtDay(holiday.date)}`);
+    return {
+      text: `Here's your recruitment summary from the live system:\n${lines.join("\n")}`,
+      followUps: hrFollowUps,
+      outcome: "answered", matched: "[live] HR summary",
+    };
+  }
+
+  // Admin: shortlisted candidates — overall or for one job
+  if (isAdmin && /\bshort\s?list\w*\b/.test(qn) && !/\bhow (do|can|to)\b/.test(qn)) {
+    const job = findJobByTitle(qWords, ctx.jobs);
+    const scope = job ? ctx.applications.filter((a) => a.jobId === job.id) : ctx.applications;
+    const byStatus = countBy(scope, (a) => a.status);
+    const stageLines = SHORTLIST_STAGES.map((s) => `• ${s.label}: ${byStatus.get(s.status) ?? 0}`);
+    const inPipeline = scope.filter((a) => SHORTLIST_STAGES.some((s) => s.status === a.status));
+    if (job) {
+      const names = inPipeline.slice(0, 8).map((a) => `• ${a.candidateName ?? a.candidateEmail} — ${a.status}`);
+      return {
+        text: `Shortlisted candidates for ${job.title} (${inPipeline.length} of ${scope.length} applicants):\n${stageLines.join("\n")}${names.length ? `\n\nCandidates:\n${names.join("\n")}${inPipeline.length > names.length ? `\n…and ${inPipeline.length - names.length} more` : ""}` : ""}`,
+        followUps: hrFollowUps,
+        outcome: "answered", matched: `[live] shortlist: ${job.title}`,
+      };
+    }
+    const perJob = countBy(inPipeline, (a) => a.title ?? "Unknown");
+    const top = [...perJob.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([t, n]) => `• ${t}: ${n}`);
+    return {
+      text: `${inPipeline.length} candidates are past first-stage screening right now:\n${stageLines.join("\n")}${top.length ? `\n\nMost shortlisted vacancies:\n${top.join("\n")}` : ""}\n\nAsk me about a specific job, e.g. "shortlisted candidates for ${top.length ? [...perJob.keys()][0] : "Network Engineer"}".`,
+      followUps: hrFollowUps,
+      outcome: "answered", matched: "[live] shortlist overview",
+    };
+  }
+
+  // Admin: how many applied for a specific job
+  if (isAdmin && /\b(appl\w*|applicants?|candidates?|people|interest\w*)\b/.test(qn)) {
+    const job = findJobByTitle(qWords, ctx.jobs);
+    if (job) {
+      const scope = ctx.applications.filter((a) => a.jobId === job.id);
+      const lines = [...countBy(scope, (a) => a.status).entries()].sort((a, b) => b[1] - a[1]).map(([s, n]) => `• ${s}: ${n}`);
+      const d = daysUntil(job.closesAt);
+      const closing = d < 0 ? `It closed on ${job.closes}.` : d === 0 ? "It closes today." : `It closes on ${job.closes} (${d} days left).`;
+      return {
+        text: `${scope.length} ${scope.length === 1 ? "person has" : "people have"} applied for ${job.title} (${job.dept}). ${closing}${lines.length ? `\n\nBy status:\n${lines.join("\n")}` : ""}`,
+        followUps: [`What is the status of the shortlisted candidates for ${job.title}?`, ...hrFollowUps.slice(0, 2)],
+        outcome: "answered", matched: `[live] applicants: ${job.title}`,
+      };
+    }
+  }
 
   // Admin: what's sitting in the approval pipeline right now?
   if (isAdmin && mentionsJobs && /\b(pending|awaiting|review\w*|approv\w*|pipeline)\b/.test(qn)) {
@@ -1022,6 +1202,7 @@ function personaOf(auth: ReturnType<typeof useApp>["auth"]): Persona {
 // tab closes, same as the rest of the session, but a refresh no longer loses
 // whatever was mid-conversation.
 const CHAT_STORAGE_KEY = "caa_martha_chat_v1";
+const CHAT_PERSONA_KEY = "caa_martha_chat_persona_v1";
 
 function loadStoredMessages(): Message[] | null {
   try {
@@ -1035,9 +1216,14 @@ function loadStoredMessages(): Message[] | null {
 }
 
 export function FaqChatbot() {
-  const { auth, jobs, applications } = useApp();
+  const { auth, jobs, applications, sessionRestoring } = useApp();
   const persona = personaOf(auth);
-  const topics = ROLE_TOPICS[persona];
+  // HR users get questions about their live data (shortlists, applicant
+  // counts, deadlines, holidays) rather than the same "how do I…" starters.
+  const topics = ADMIN_PERSONAS.includes(persona)
+    ? [...adminTopics(jobs, applications), ROLE_TOPICS[persona][0]]
+    : ROLE_TOPICS[persona];
+  const topicsKey = topics.join("|");
   const firstName = auth.isLoggedIn ? auth.firstName : "";
 
   const [open, setOpen] = useState(false);
@@ -1062,13 +1248,24 @@ export function FaqChatbot() {
   // toward related topics and to bridge vague follow-ups ("how long does that take?").
   const lastEntryRef = useRef<FaqEntry | null>(null);
 
-  // If the user signs in/out (or their role changes) before chatting,
-  // refresh the greeting and suggestions to match who they are.
+  // A different kind of user signing in (candidate → HR, sign-out…) starts a
+  // fresh conversation. Previously a conversation started as one user was
+  // kept for the whole tab, so HR kept seeing a candidate's suggestions.
+  // Wait for the stored session to load so a reload doesn't look like a switch.
   useEffect(() => {
-    if (!conversationStarted.current) {
-      setMessages([{ from: "bot", text: pick(WELCOMES)(firstName), followUps: ROLE_TOPICS[persona] }]);
+    if (sessionRestoring) return;
+    let storedPersona: string | null = null;
+    try { storedPersona = sessionStorage.getItem(CHAT_PERSONA_KEY); } catch {}
+    if (storedPersona !== persona) {
+      conversationStarted.current = false;
+      lastEntryRef.current = null;
+      try { sessionStorage.setItem(CHAT_PERSONA_KEY, persona); } catch {}
     }
-  }, [persona, firstName]);
+    if (!conversationStarted.current) {
+      setMessages([{ from: "bot", text: pick(WELCOMES)(firstName), followUps: topics }]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [persona, firstName, sessionRestoring, topicsKey]);
 
   useEffect(() => {
     try { sessionStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(messages)); } catch {}
