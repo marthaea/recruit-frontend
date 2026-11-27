@@ -23,7 +23,7 @@ import { AssessmentInviteModal, type InviteCandidate } from "./AssessmentInviteM
 export function AppsTab({ jobs, applications, jobId, cvStore, updateStatus, bulkUpdateStatus, logAction, actor, criteria, role, perms, logEmail, bulkLogEmails, initialStatusFilter, onSelectJob, onClearJob, mode = "shortlist" }: any) {
   const { pushToast, loadCvsForEmails } = useApp();
   const navigate = useNavigate();
-  const [viewingAll, setViewingAll] = useState(false);
+  const [viewingAll, setViewingAll] = useState(mode === "list" && !!initialStatusFilter);
   const filtered = jobId ? applications.filter((a: Application) => a.jobId === jobId) : applications;
   const job = jobs.find((j: Job) => j.id === jobId);
   const [selected, setSelected] = useState<Application | null>(null);
@@ -498,7 +498,7 @@ export function AppsTab({ jobs, applications, jobId, cvStore, updateStatus, bulk
         ];
         const declinedCount = filtered.filter((a: Application) => a.status === "Declined").length;
         return (
-          <div className="caa-card p-3">
+          <div className="caa-card p-3" data-attention="status-bar">
             <div className="flex items-center gap-1 flex-wrap">
               <button
                 onClick={() => setStatusFilter("all")}
@@ -611,7 +611,7 @@ export function AppsTab({ jobs, applications, jobId, cvStore, updateStatus, bulk
           </thead>
           <tbody className="divide-y divide-caa-border">
             {displayed.map((a: Application) => (
-              <tr key={a.id} className="hover:bg-caa-surface/50 cursor-pointer" onClick={() => setSelected(a)}>
+              <tr key={a.id} data-app-row={a.id} className="hover:bg-caa-surface/50 cursor-pointer" onClick={() => setSelected(a)}>
                 <td className="p-3" onClick={(e) => e.stopPropagation()}>
                   <button onClick={() => toggleSelected(a.id)}>
                     {selectedIds.has(a.id) ? <CheckSquare className="h-4 w-4 text-caa-navy" /> : <Square className="h-4 w-4 text-caa-muted" />}

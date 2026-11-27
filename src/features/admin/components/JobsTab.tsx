@@ -925,7 +925,7 @@ export function JobsTab({ jobs, applications, isExpired, addJob, updateJob, dele
             {visibleJobs.map((j: Job) => {
               const status: JobStatus = j.status ?? "published";
               return (
-              <tr key={j.id}>
+              <tr key={j.id} data-job-row={j.id}>
                 <td className="p-3">
                   <p className="font-medium text-caa-body">{j.title}</p>
                   <p className="text-[11px] text-caa-muted">{j.dept}</p>

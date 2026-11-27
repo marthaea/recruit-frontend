@@ -31,6 +31,8 @@ export const Route = createFileRoute("/admin")({
       .optional()
       .catch(undefined),
     jobId: z.coerce.number().optional(),
+    status: z.string().optional().catch(undefined),
+    focus: z.enum(["pending", "stale", "invite", "closing", "low"]).optional().catch(undefined),
   }),
   head: () => ({ meta: [{ title: "HR Console — UCAA" }] }),
   component: AdminPage,
