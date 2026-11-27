@@ -480,7 +480,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // a logged-in-looking user — the HR Console in particular — must wait for
   // this to clear before rendering, or they'll fire an authenticated request
   // with no token yet and get bounced out by the 401 handler in client.ts.
-  const [sessionRestoring, setSessionRestoring] = useState(false);
+  // Starts true: child pages' effects run before this provider's effect, so
+  // starting false let /dashboard (and /apply) see "logged out" on a refresh
+  // and redirect a signed-in user to /login before the stored session loaded.
+  const [sessionRestoring, setSessionRestoring] = useState(true);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [signInPromptOpen, setSignInPromptOpen] = useState(false);
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -499,6 +502,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [sentEmails, setSentEmails] = useState<SentEmail[]>([]);
 
   useEffect(() => {
+    let restoring = false;
     try {
       for (const key of LEGACY_DEMO_STORAGE_KEYS) {
         localStorage.removeItem(key);
@@ -508,14 +512,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const stored = JSON.parse(raw) as Auth;
         if (stored.isLoggedIn) {
           setAuth(stored);
-          setSessionRestoring(true);
+          restoring = true;
           restoreSession().then((ok) => {
             if (!ok) {
               setAuth({ isLoggedIn: false, firstName: "", lastName: "", email: "", accountType: "external" });
               try { localStorage.removeItem(STORAGE_KEY); } catch {}
             }
             setSessionRestoring(false);
-          });
+          }).catch(() => setSessionRestoring(false));
         } else {
           setAuth(stored);
         }
@@ -533,6 +537,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const rem = localStorage.getItem(EMAILS_KEY);
       if (rem) setSentEmails(JSON.parse(rem));
     } catch {}
+    if (!restoring) setSessionRestoring(false);
 
     fetchJobsList();
     settingsApi.get().then(r => { if (r.success) setSettings(prev => ({ ...prev, ...(r.data as unknown as AdminSettings) })); }).catch(() => {});
@@ -553,6 +558,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
           }
         }).catch(() => {});
       }
+    } else {
+      // The Apply form pre-fills from `cv`, which used to come only from this
+      // browser's localStorage — so on a new device a candidate with a 100%
+      // complete server-side profile got an empty 8-step form. Load it here.
+      cvApi.get().then(r => {
+        const server = r.success ? (r.data as unknown as Partial<CvProfile> | null) : null;
+        if (!server?.personal?.firstName) return;
+        const next: CvProfile = {
+          ...EMPTY_CV,
+          ...server,
+          personal: { ...EMPTY_CV.personal, ...server.personal },
+          nextOfKin: { ...EMPTY_CV.nextOfKin, ...(server.nextOfKin ?? {}) },
+          highestLevel: server.highestLevel ?? "",
+          photoFile: server.photoFile ?? undefined,
+        };
+        setCv(next); setHasCv(true);
+        try { localStorage.setItem(CV_KEY, JSON.stringify(next)); } catch {}
+      }).catch(() => {});
     }
     appsApi.list().then(r => { if (r.success) persistApps(r.data as unknown as Application[]); }).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -572,6 +595,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const persist = (a: Auth) => {
     setAuth(a);
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(a)); } catch {}
+    // Signing out (or an expired session) must not leave this candidate's CV
+    // behind for the next person who signs in on the same browser.
+    if (!a.isLoggedIn) {
+      setCv(EMPTY_CV); setHasCv(false);
+      try { localStorage.removeItem(CV_KEY); } catch {}
+    }
   };
   const persistJobs = (next: Job[]) => { jobsMutatedAtRef.current = Date.now(); setJobs(next); };
   const persistApps = (next: Application[]) => { setApplications(next); };
