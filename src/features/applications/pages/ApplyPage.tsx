@@ -49,6 +49,16 @@ export function ApplyPage() {
   });
   const [submitted, setSubmitted] = useState<string | null>(null);
 
+  // The saved CV can arrive from the server after this page mounted (the
+  // useState initialisers above only run once). Adopt it if the candidate
+  // hasn't started filling the form in yet.
+  useEffect(() => {
+    if (!hasCv || step !== 0 || data.personal.phone || data.qualifications.length > 0) return;
+    setData(cv);
+    setStep(TOTAL_STEPS - 1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasCv, cv]);
+
   // The org-wide floor (Settings → "Minimum applicant age") sets a baseline no
   // job can go below, regardless of what a specific job's own minAge says —
   // the two are complementary, not duplicates: a job can require an older

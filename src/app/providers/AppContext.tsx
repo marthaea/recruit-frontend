@@ -558,6 +558,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
           }
         }).catch(() => {});
       }
+    } else {
+      // The Apply form pre-fills from `cv`, which used to come only from this
+      // browser's localStorage — so on a new device a candidate with a 100%
+      // complete server-side profile got an empty 8-step form. Load it here.
+      cvApi.get().then(r => {
+        const server = r.success ? (r.data as unknown as Partial<CvProfile> | null) : null;
+        if (!server?.personal?.firstName) return;
+        const next: CvProfile = {
+          ...EMPTY_CV,
+          ...server,
+          personal: { ...EMPTY_CV.personal, ...server.personal },
+          nextOfKin: { ...EMPTY_CV.nextOfKin, ...(server.nextOfKin ?? {}) },
+          highestLevel: server.highestLevel ?? "",
+          photoFile: server.photoFile ?? undefined,
+        };
+        setCv(next); setHasCv(true);
+        try { localStorage.setItem(CV_KEY, JSON.stringify(next)); } catch {}
+      }).catch(() => {});
     }
     appsApi.list().then(r => { if (r.success) persistApps(r.data as unknown as Application[]); }).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -577,6 +595,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const persist = (a: Auth) => {
     setAuth(a);
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(a)); } catch {}
+    // Signing out (or an expired session) must not leave this candidate's CV
+    // behind for the next person who signs in on the same browser.
+    if (!a.isLoggedIn) {
+      setCv(EMPTY_CV); setHasCv(false);
+      try { localStorage.removeItem(CV_KEY); } catch {}
+    }
   };
   const persistJobs = (next: Job[]) => { jobsMutatedAtRef.current = Date.now(); setJobs(next); };
   const persistApps = (next: Application[]) => { setApplications(next); };
