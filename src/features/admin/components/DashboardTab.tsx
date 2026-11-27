@@ -109,24 +109,92 @@ export function DashboardTab({ jobs, applications, isExpired, navigate, settings
     return months;
   })();
 
+  // Builds a standalone print page. The old version pasted the dashboard's
+  // innerHTML into a blank window, but that window has none of the site's
+  // CSS, so chart containers sized by Tailwind classes collapsed and only
+  // some charts survived. Here each chart's SVG is cloned and given a
+  // viewBox (so it scales to the page), and the legends, totals and KPIs are
+  // rebuilt from the data as plain HTML.
   const printCharts = () => {
     const el = printRef.current;
     if (!el) return;
+    const esc = (s: unknown) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]!));
+    const chartSvg = (name: string, maxWidth: number) => {
+      const svg = el.querySelector<SVGSVGElement>(`[data-print-chart="${name}"] svg.recharts-surface`);
+      if (!svg) return `<p class="empty">No data to chart.</p>`;
+      const width = Number(svg.getAttribute("width")) || svg.clientWidth || 600;
+      const height = Number(svg.getAttribute("height")) || svg.clientHeight || 200;
+      const clone = svg.cloneNode(true) as SVGSVGElement;
+      clone.setAttribute("viewBox", `0 0 ${width} ${height}`);
+      clone.setAttribute("width", "100%");
+      clone.removeAttribute("height");
+      clone.removeAttribute("style");
+      clone.setAttribute("preserveAspectRatio", "xMidYMid meet");
+      return `<div class="chart" style="max-width:${maxWidth}px">${new XMLSerializer().serializeToString(clone)}</div>`;
+    };
+    const total = applications.length;
+    const statusRows = statusData.map((d) =>
+      `<tr><td><span class="sw" style="background:${statusColor(d.name)}"></span>${esc(d.name)}</td><td class="n">${d.value}</td><td class="n muted">${total ? Math.round((d.value / total) * 100) : 0}%</td></tr>`).join("");
+    const deptRows = deptData.map((d) => `<tr><td>${esc(d.full)}</td><td class="n">${d.apps}</td></tr>`).join("");
+    const kpiHtml = kpis.map((k) => `<div class="kpi"><div class="kl">${esc(k.label)}</div><div class="kn">${k.n}</div></div>`).join("");
+
     const w = window.open("", "_blank");
-    if (!w) return;
-    w.document.write(`<html><head><title>Dashboard Charts — UCAA</title><style>
-      body { font-family: helvetica,sans-serif; padding: 24px; }
-      h1 { color: #0d2454; font-size: 18px; margin-bottom: 4px; }
-      p { color: #888; font-size: 12px; margin-bottom: 20px; }
-      .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-      .card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; }
-      h3 { font-size: 13px; color: #0d2454; margin-bottom: 12px; }
-    </style></head><body>`);
-    w.document.write(`<h1>UGANDA CIVIL AVIATION AUTHORITY</h1><p>Recruitment Dashboard — ${new Date().toLocaleDateString()}</p>`);
-    w.document.write(el.innerHTML);
-    w.document.write("</body></html>");
+    if (!w) {
+      pushToast({ type: "warning", title: "Pop-up blocked", message: "Allow pop-ups for this site to print the charts." });
+      return;
+    }
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Recruitment dashboard — UCAA</title><style>
+      @page { size: A4; margin: 14mm; }
+      * { box-sizing: border-box; }
+      body { font-family: "DM Sans", Helvetica, Arial, sans-serif; color: #0F1C30; margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      header { border-bottom: 3px solid #0B2E5F; padding-bottom: 10px; margin-bottom: 16px; }
+      h1 { color: #0B2E5F; font-size: 18px; margin: 0; }
+      .sub { color: #5B5F66; font-size: 12px; margin: 4px 0 0; }
+      .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
+      .kpi { border: 1px solid #E5E1D8; border-radius: 8px; padding: 10px 12px; }
+      .kl { font-size: 11px; color: #5B5F66; }
+      .kn { font-size: 22px; font-weight: 700; margin-top: 2px; }
+      .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+      .card { border: 1px solid #E5E1D8; border-radius: 8px; padding: 14px; break-inside: avoid; page-break-inside: avoid; }
+      .wide { grid-column: 1 / -1; }
+      h3 { font-size: 14px; margin: 0 0 2px; }
+      .hint { font-size: 11px; color: #5B5F66; margin: 0 0 10px; }
+      .chart { margin: 0 auto 8px; }
+      .chart svg { display: block; width: 100%; height: auto; }
+      table { width: 100%; border-collapse: collapse; font-size: 11px; }
+      td { padding: 3px 0; border-top: 1px solid #EEEBE4; }
+      td.n { text-align: right; font-variant-numeric: tabular-nums; width: 48px; }
+      .muted { color: #8C8F96; }
+      .sw { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
+      .empty { font-size: 12px; color: #8C8F96; }
+      footer { margin-top: 14px; font-size: 10px; color: #8C8F96; }
+    </style></head><body>
+      <header>
+        <h1>Uganda Civil Aviation Authority</h1>
+        <p class="sub">Recruitment dashboard, printed ${esc(new Date().toLocaleString("en-GB", { dateStyle: "long", timeStyle: "short" }))}</p>
+      </header>
+      <section class="kpis">${kpiHtml}</section>
+      <section class="grid">
+        <div class="card">
+          <h3>Applications by status</h3><p class="hint">${total} applications in total</p>
+          ${chartSvg("status", 200)}
+          <table>${statusRows}</table>
+        </div>
+        <div class="card">
+          <h3>Applications by department</h3><p class="hint">Across all listings, open and closed</p>
+          ${chartSvg("department", 520)}
+          <table>${deptRows}</table>
+        </div>
+        <div class="card wide">
+          <h3>Applications over the last 6 months</h3>
+          ${chartSvg("trend", 1000)}
+        </div>
+      </section>
+      <footer>HR Console, UCAA e-Recruitment Portal</footer>
+    </body></html>`);
     w.document.close();
-    w.print();
+    // Give the new window a moment to lay out before opening the print dialog.
+    setTimeout(() => { w.focus(); w.print(); }, 300);
   };
 
   const today = new Date().toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric" });
@@ -302,7 +370,7 @@ export function DashboardTab({ jobs, applications, isExpired, navigate, settings
       {/* Charts grid — printable */}
       <AnimatedSection delay={160}>
       <div ref={printRef} className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        <div className="admin-card card p-5">
+        <div className="admin-card card p-5" data-print-chart="status">
           <PanelHeading title="Applications by status" hint={`${applications.length} applications in total`} />
           <div className="flex items-center gap-4 flex-wrap sm:flex-nowrap">
             <div className="relative h-[190px] w-[190px] shrink-0 mx-auto sm:mx-0">
@@ -336,7 +404,7 @@ export function DashboardTab({ jobs, applications, isExpired, navigate, settings
           </div>
         </div>
 
-        <div className="admin-card card p-5">
+        <div className="admin-card card p-5" data-print-chart="department">
           <PanelHeading title="Applications by department" hint="Across all listings, open and closed" />
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={deptData} margin={{ left: -24, right: 4, top: 4 }}>
@@ -349,7 +417,7 @@ export function DashboardTab({ jobs, applications, isExpired, navigate, settings
           </ResponsiveContainer>
         </div>
 
-        <div className="admin-card card p-5 md:col-span-2">
+        <div className="admin-card card p-5 md:col-span-2" data-print-chart="trend">
           <PanelHeading title="Applications over the last 6 months" />
           <ResponsiveContainer width="100%" height={170}>
             <AreaChart data={trend} margin={{ left: -24, right: 8, top: 4 }}>
