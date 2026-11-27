@@ -128,7 +128,10 @@ export function CandidateScoringPanel({ jobs, applications, jobId, cvStore, acto
     } else {
       pushToast({ type: "success", title: "Auto-shortlist applied", message: `${decline.length} declined — nobody cleared the threshold.` });
     }
-    load();
+    // Reloading here raced the status updates and still listed the declined
+    // candidates until a page refresh; drop them from the list directly.
+    const declinedIds = new Set(decline.map((r) => r.applicationId));
+    setRows((prev) => prev.filter((r) => !declinedIds.has(r.applicationId)));
   };
 
   const exportForOfflineScoring = () => {

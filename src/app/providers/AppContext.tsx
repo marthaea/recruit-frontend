@@ -991,7 +991,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const dismissToast = (id: number) => setToasts((prev) => prev.filter((t) => t.id !== id));
 
+  const auditRefreshRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const logAction = (action: string, target?: string) => {
+    // HR sessions show the server's audit log (the backend records status
+    // changes, scores and logins itself). Adding a local copy here showed
+    // every action twice, and POSTing it duplicated it on the server — so
+    // just re-read the server log once the action's own requests land.
+    if (auth.accountType === "admin") {
+      if (auditRefreshRef.current) clearTimeout(auditRefreshRef.current);
+      auditRefreshRef.current = setTimeout(() => {
+        auditApi.list({ limit: 200 }).then(r => {
+          if (r.success) setAudit((r.data as unknown as AuditEntry[]).map(({ id, at, actor, role, action, target }) => ({ id, at, actor, role, action, target })));
+        }).catch(() => {});
+      }, 1500);
+      return;
+    }
     const entry: AuditEntry = {
       id: Date.now(),
       at: new Date().toISOString(),
@@ -1004,9 +1018,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       try { localStorage.setItem(AUDIT_KEY, JSON.stringify(next)); } catch {}
       return next;
     });
-    // Previously browser-only, so the Audit Log was empty on any other
-    // machine or for any other HR officer. Record it server-side too.
-    if (auth.accountType === "admin") auditApi.create({ action, target }).catch(() => {});
   };
 
   const updateSettings = (p: Partial<AdminSettings>) => {
