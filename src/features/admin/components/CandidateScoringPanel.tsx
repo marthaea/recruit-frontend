@@ -17,6 +17,7 @@ export function CandidateScoringPanel({ jobs, applications, jobId, cvStore, acto
   const [rows, setRows] = useState<CandidateScoreSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [threshold, setThreshold] = useState(70);
+  const [confirmingRun, setConfirmingRun] = useState(false);
   const [drafts, setDrafts] = useState<Record<number, { score: string; comment: string }>>({});
   const [saving, setSaving] = useState<number | null>(null);
   const [importing, setImporting] = useState(false);
@@ -102,9 +103,7 @@ export function CandidateScoringPanel({ jobs, applications, jobId, cvStore, acto
     if (scored.length === 0) return;
     const advance = scored.filter((r) => (r.average ?? 0) >= threshold);
     const decline = scored.filter((r) => (r.average ?? 0) < threshold);
-    if (decline.length > 0 && !window.confirm(
-      `Auto-shortlist at ≥${threshold}: ${advance.length} will advance and ${decline.length} will be DECLINED. Continue?`,
-    )) return;
+    setConfirmingRun(false);
     if (decline.length > 0) {
       bulkUpdateStatus(decline.map((r) => ({ id: r.applicationId, status: "Declined" as const })));
     }
@@ -182,7 +181,20 @@ export function CandidateScoringPanel({ jobs, applications, jobId, cvStore, acto
       <div className="caa-card p-3 flex flex-wrap items-center gap-3">
         <label className="text-xs font-semibold text-caa-body">Auto-shortlist by score — advance candidates averaging ≥</label>
         <input type="number" min={0} max={100} className="w-20 text-xs font-semibold border border-caa-border rounded px-2 py-1.5 text-center" value={threshold} onChange={(e) => setThreshold(parseFloat(e.target.value) || 0)} />
-        <button onClick={runAutoShortlist} disabled={scored.length === 0} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-caa-navy text-white rounded-md disabled:opacity-50"><Zap className="h-3.5 w-3.5" /> Run ({scored.length} scored)</button>
+        <button onClick={() => setConfirmingRun(true)} disabled={scored.length === 0} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-caa-navy text-white rounded-md disabled:opacity-50"><Zap className="h-3.5 w-3.5" /> Run ({scored.length} scored)</button>
+        {confirmingRun && (() => {
+          const willAdvance = scored.filter((r) => (r.average ?? 0) >= threshold).length;
+          const willDecline = scored.length - willAdvance;
+          return (
+            <div role="alertdialog" aria-label="Confirm auto-shortlist" className="w-full rounded-md border border-caa-border bg-caa-surface p-3 flex flex-wrap items-center gap-3">
+              <p className="text-xs text-caa-body">
+                At ≥{threshold}: <strong>{willAdvance}</strong> will advance and <strong className="text-caa-danger">{willDecline} will be declined</strong> (and notified).
+              </p>
+              <button onClick={runAutoShortlist} className="px-3 py-1.5 text-xs font-semibold bg-caa-navy text-white rounded-md">Confirm auto-shortlist</button>
+              <button onClick={() => setConfirmingRun(false)} className="px-3 py-1.5 text-xs border border-caa-border rounded-md">Cancel</button>
+            </div>
+          );
+        })()}
         <p className="text-[11px] text-caa-muted">Candidates below the threshold are Declined immediately. Candidates at or above it aren't auto-advanced — you'll be asked to pick an assessment type and schedule to invite them. Unscored candidates are skipped.</p>
       </div>
 
