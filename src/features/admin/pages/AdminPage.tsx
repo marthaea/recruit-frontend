@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate, Link, useSearch } from "@tanstack/react-router";
 import {
   Users, Briefcase, LayoutDashboard, FileText, GraduationCap, Download,
@@ -12,6 +12,7 @@ import {
 } from "@/app/providers/AppContext";
 import { AdminLogin } from "@/features/admin/components/AdminLogin";
 import { DashboardTab } from "@/features/admin/components/DashboardTab";
+import { computeAttention, buildAttentionSteps } from "@/features/admin/components/attention";
 import { JobsTab } from "@/features/admin/components/JobsTab";
 import { AppsTab } from "@/features/admin/components/ApplicationsTab";
 import { CandidateScoringPanel } from "@/features/admin/components/CandidateScoringPanel";
@@ -108,7 +109,7 @@ export function AdminPage() {
           notifications, criteria,
           permissionOverrides, savePermissionOverride, cvStore,
           sentEmails, logEmail, bulkLogEmails, clearEmailLog } = useApp();
-  const { tab = auth.accountType === "admin" ? "dashboard" : "login", jobId } = useSearch({
+  const { tab = auth.accountType === "admin" ? "dashboard" : "login", jobId, status, focus } = useSearch({
     from: "/admin",
   });
   const navigate = useNavigate();
@@ -137,6 +138,16 @@ export function AdminPage() {
   useEffect(() => {
     if (tour.stage === "touring") setMobileNavOpen(true);
   }, [tour.stage]);
+
+  // "Needs your attention" deep links (?focus=…): the dashboard sends HR to the
+  // right tab with the right filter, then this spotlights exactly what needs
+  // action, using the same pointer as the onboarding tour.
+  const attentionSteps = useMemo(
+    () => (focus ? buildAttentionSteps(focus, computeAttention(jobs, applications, isExpired, settings.closingSoonDays ?? 7), settings.closingSoonDays ?? 7) : []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [focus, jobs.length, applications.length],
+  );
+  const closeAttention = () => navigate({ to: "/admin", search: { tab, jobId, status } });
 
   // A stored session looks logged-in immediately (see AppContext's mount
   // effect) but isn't confirmed against the backend yet. Rendering the real
@@ -312,7 +323,7 @@ export function AdminPage() {
           {tab === "jobs"        && canAccess(role, "canManageJobs", perms) && <JobsTab jobs={jobs} applications={applications} isExpired={isExpired} addJob={addJob} updateJob={updateJob} deleteJob={deleteJob} onViewApps={(id: number) => navigate({ to: "/admin", search: { tab: "apps", jobId: id } })} viewMode="create" tourAutoOpen={tour.stage === "touring"} />}
           {tab === "review-jobs" && canAccess(role, "canReviewJob", perms) && <JobsTab jobs={jobs} applications={applications} isExpired={isExpired} onViewApps={(id: number) => navigate({ to: "/admin", search: { tab: "apps", jobId: id } })} viewMode="review" />}
           {tab === "approve-jobs" && canAccess(role, "canApproveJob", perms) && <JobsTab jobs={jobs} applications={applications} isExpired={isExpired} onViewApps={(id: number) => navigate({ to: "/admin", search: { tab: "apps", jobId: id } })} viewMode="approve" />}
-          {tab === "apps"        && canAccess(role, "canViewApplications", perms) && <AppsTab jobs={jobs} applications={applications} jobId={jobId} cvStore={cvStore} updateStatus={updateApplicationStatus} bulkUpdateStatus={bulkUpdateApplicationStatus} logAction={logAction} actor={actor} criteria={criteria} role={role} perms={perms} logEmail={logEmail} bulkLogEmails={bulkLogEmails} mode="list" onSelectJob={(id: number) => navigate({ to: "/admin", search: { tab: "apps", jobId: id } })} onClearJob={() => navigate({ to: "/admin", search: { tab: "apps" } })} />}
+          {tab === "apps"        && canAccess(role, "canViewApplications", perms) && <AppsTab jobs={jobs} applications={applications} jobId={jobId} cvStore={cvStore} updateStatus={updateApplicationStatus} bulkUpdateStatus={bulkUpdateApplicationStatus} logAction={logAction} actor={actor} criteria={criteria} role={role} perms={perms} logEmail={logEmail} bulkLogEmails={bulkLogEmails} mode="list" key={status ?? "all"} initialStatusFilter={status} onSelectJob={(id: number) => navigate({ to: "/admin", search: { tab: "apps", jobId: id } })} onClearJob={() => navigate({ to: "/admin", search: { tab: "apps" } })} />}
           {tab === "shortlisting" && canAccess(role, "canShortlist", perms) && <AppsTab jobs={jobs} applications={applications} jobId={jobId} cvStore={cvStore} updateStatus={updateApplicationStatus} bulkUpdateStatus={bulkUpdateApplicationStatus} logAction={logAction} actor={actor} criteria={criteria} role={role} perms={perms} logEmail={logEmail} bulkLogEmails={bulkLogEmails} mode="shortlist" initialStatusFilter="Shortlisted" onSelectJob={(id: number) => navigate({ to: "/admin", search: { tab: "shortlisting", jobId: id } })} onClearJob={() => navigate({ to: "/admin", search: { tab: "shortlisting" } })} />}
           {tab === "interview-panel" && canAccess(role, "canShortlist", perms) && <InterviewPanelTab jobs={jobs} />}
           {tab === "assessment-schedule" && canAccess(role, "canScheduleAssessment", perms) && <AssessmentTab jobs={jobs} applications={applications} criteria={criteria} mode="schedule" />}
@@ -341,6 +352,9 @@ export function AdminPage() {
 
       {tour.stage === "prompt" && <OnboardingPrompt def={adminTour} onAccept={tour.accept} onSkip={tour.dismiss} />}
       {tour.stage === "touring" && <OnboardingSpotlight steps={adminTour.steps} onFinish={tour.dismiss} onSkip={tour.dismiss} />}
+      {focus && tour.stage !== "touring" && attentionSteps.length > 0 && (
+        <OnboardingSpotlight key={focus} steps={attentionSteps} onFinish={closeAttention} onSkip={closeAttention} skipLabel="Close" />
+      )}
     </div>
   );
 }

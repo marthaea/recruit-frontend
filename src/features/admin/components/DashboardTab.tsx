@@ -11,6 +11,7 @@ import {
 import { cv as cvApi } from "@/services/api/client";
 import { PhotoCropModal } from "@/features/candidate/components/PhotoCropModal";
 import { AnimatedSection } from "./shared";
+import { computeAttention, ATTENTION_TARGET, type AttentionFocus } from "./attention";
 
 // Dashboard-only status palette, tuned to the UCAA navy brand so the charts
 // read as one family instead of the rainbow STATUS_COLORS used elsewhere.
@@ -38,7 +39,7 @@ const TOOLTIP_STYLE = {
 function PanelHeading({ title, hint }: { title: string; hint?: string }) {
   return (
     <div className="mb-4">
-      <h3 className="font-display text-base font-semibold text-caa-body">{title}</h3>
+      <h3 className="text-base font-bold text-caa-body">{title}</h3>
       {hint && <p className="text-xs text-caa-muted mt-0.5">{hint}</p>}
     </div>
   );
@@ -157,7 +158,7 @@ export function DashboardTab({ jobs, applications, isExpired, navigate, settings
                 />
               ) : (
                 <div className="h-16 w-16 rounded-2xl bg-white/12 ring-2 ring-white/25 group-hover:ring-white/60 flex items-center justify-center transition">
-                  <span className="font-display font-bold text-xl select-none">
+                  <span className="font-bold text-xl select-none">
                     {auth?.firstName?.[0]}{auth?.lastName?.[0]}
                   </span>
                 </div>
@@ -191,7 +192,7 @@ export function DashboardTab({ jobs, applications, isExpired, navigate, settings
                 <s.Icon className="h-3.5 w-3.5" />
                 {s.label}
               </div>
-              <p className="font-display font-bold text-[34px] leading-none mt-2 tabular-nums">{s.n}</p>
+              <p className="font-bold text-[34px] leading-none mt-2 tabular-nums">{s.n}</p>
               <p className="text-[11px] text-white/55 mt-2 flex items-center gap-1">
                 {s.hint ?? (
                   <span className={weekDelta > 0 ? "text-emerald-300" : weekDelta < 0 ? "text-rose-300" : ""}>
@@ -232,7 +233,7 @@ export function DashboardTab({ jobs, applications, isExpired, navigate, settings
                       <div className="flex items-baseline justify-between gap-3">
                         <span className="text-sm text-caa-body group-hover:text-caa-navy transition-colors">{s.label}</span>
                         <span className="text-sm tabular-nums">
-                          <span className="font-display font-semibold text-caa-body">{s.count}</span>
+                          <span className="font-bold text-caa-body">{s.count}</span>
                           <span className="text-caa-light ml-2 text-xs">{pct}%</span>
                         </span>
                       </div>
@@ -252,37 +253,20 @@ export function DashboardTab({ jobs, applications, isExpired, navigate, settings
 
         {/* Pending Actions */}
         {(() => {
-          const pendingAppsCount     = applications.filter((a: Application) => a.status === "Pending").length;
-          const awaitingInterviewCount = applications.filter((a: Application) => a.status === "Shortlisted").length;
           const csDays = settings?.closingSoonDays ?? 7;
-          const closingSoonCount     = jobs.filter((j: Job) => {
-            if (isExpired(j)) return false;
-            const diff = (new Date(j.closesAt).getTime() - Date.now()) / 86_400_000;
-            return diff > 0 && diff <= csDays;
-          }).length;
-          const stalePendingCount = applications.filter((a: Application) => {
-            if (a.status !== "Pending") return false;
-            const d = parseDate(a.date);
-            return d != null && (now - d.getTime()) / 86_400_000 > 7;
-          }).length;
-          const lowApplicantJobs = jobs.filter((j: Job) => {
-            if (isExpired(j)) return false;
-            const diff = (new Date(j.closesAt).getTime() - Date.now()) / 86_400_000;
-            if (diff <= 0 || diff > 3) return false;
-            return applications.filter((a: Application) => a.jobId === j.id).length < 3;
-          }).length;
+          const att = computeAttention(jobs, applications, isExpired, csDays);
           const TONE = {
             info:    "bg-caa-navy-2",
             warning: "bg-caa-warning",
             danger:  "bg-caa-danger",
           } as const;
-          const items: { count: number; label: string; tone: keyof typeof TONE; tab: string }[] = [
-            { count: pendingAppsCount,       label: "application" + (pendingAppsCount !== 1 ? "s" : "") + " awaiting first review", tone: "info", tab: "apps" },
-            { count: stalePendingCount,      label: "application" + (stalePendingCount !== 1 ? "s" : "") + " pending review for over 7 days", tone: "warning", tab: "apps" },
-            { count: awaitingInterviewCount, label: "shortlisted candidate" + (awaitingInterviewCount !== 1 ? "s" : "") + " to invite for interview", tone: "info", tab: "apps" },
-            { count: closingSoonCount,       label: "vacanc" + (closingSoonCount !== 1 ? "ies" : "y") + ` closing within ${csDays} days`, tone: "danger", tab: "jobs" },
-            { count: lowApplicantJobs,       label: "vacanc" + (lowApplicantJobs !== 1 ? "ies" : "y") + " closing in ≤3 days with fewer than 3 applicants", tone: "danger", tab: "jobs" },
-          ].filter((i) => i.count > 0) as any;
+          const items: { count: number; label: string; tone: keyof typeof TONE; focus: AttentionFocus }[] = ([
+            { count: att.pending.length, label: "application" + (att.pending.length !== 1 ? "s" : "") + " awaiting first review", tone: "info", focus: "pending" },
+            { count: att.stale.length,   label: "application" + (att.stale.length !== 1 ? "s" : "") + " pending review for over 7 days", tone: "warning", focus: "stale" },
+            { count: att.invite.length,  label: "shortlisted candidate" + (att.invite.length !== 1 ? "s" : "") + " to invite for interview", tone: "info", focus: "invite" },
+            { count: att.closing.length, label: "vacanc" + (att.closing.length !== 1 ? "ies" : "y") + ` closing within ${csDays} days`, tone: "danger", focus: "closing" },
+            { count: att.low.length,     label: "vacanc" + (att.low.length !== 1 ? "ies" : "y") + " closing in ≤3 days with fewer than 3 applicants", tone: "danger", focus: "low" },
+          ] as const).filter((i) => i.count > 0).map((i) => ({ ...i }));
           return (
             <div className="admin-card p-5 lg:col-span-2">
               <PanelHeading title="Needs your attention" hint={items.length ? `${items.length} item${items.length !== 1 ? "s" : ""} to action` : undefined} />
@@ -297,11 +281,12 @@ export function DashboardTab({ jobs, applications, isExpired, navigate, settings
                   {items.map((item) => (
                     <li key={item.label}>
                       <button
-                        onClick={() => navigate({ to: "/admin", search: { tab: item.tab as any } })}
+                        onClick={() => navigate({ to: "/admin", search: { ...ATTENTION_TARGET[item.focus], focus: item.focus } })}
+                        title="Open it with a guided pointer to what needs action"
                         className="w-full text-left flex items-center gap-3 px-2 py-3 rounded-lg hover:bg-caa-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-caa-navy-2/40 transition-colors group"
                       >
                         <span className={`h-8 w-1 rounded-full shrink-0 ${TONE[item.tone]}`} aria-hidden />
-                        <span className="font-display font-bold text-xl text-caa-body tabular-nums w-12 shrink-0">{item.count}</span>
+                        <span className="font-bold text-xl text-caa-body tabular-nums w-12 shrink-0">{item.count}</span>
                         <span className="text-sm text-caa-muted leading-snug flex-1">{item.label}</span>
                         <ChevronRight className="h-4 w-4 text-caa-light group-hover:text-caa-navy shrink-0 transition-colors" />
                       </button>
@@ -332,7 +317,7 @@ export function DashboardTab({ jobs, applications, isExpired, navigate, settings
                 </PieChart>
               </ResponsiveContainer>
               <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                <span className="font-display font-bold text-2xl text-caa-body tabular-nums">{applications.length}</span>
+                <span className="font-bold text-2xl text-caa-body tabular-nums">{applications.length}</span>
                 <span className="text-[11px] text-caa-muted">applications</span>
               </div>
             </div>

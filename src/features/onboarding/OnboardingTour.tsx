@@ -104,7 +104,7 @@ function tooltipStyle(rect: DOMRect | null): React.CSSProperties {
   return { top, left, width: cardWidth };
 }
 
-export function OnboardingSpotlight({ steps, onFinish, onSkip }: { steps: TourStep[]; onFinish: () => void; onSkip: () => void }) {
+export function OnboardingSpotlight({ steps, onFinish, onSkip, skipLabel = "Skip tour" }: { steps: TourStep[]; onFinish: () => void; onSkip: () => void; skipLabel?: string }) {
   const [index, setIndex] = useState(0);
   const [rect, setRect] = useState<DOMRect | null>(null);
   const cardRef = useModalA11y<HTMLDivElement>(onSkip);
@@ -173,14 +173,14 @@ export function OnboardingSpotlight({ steps, onFinish, onSkip }: { steps: TourSt
       >
         <div className="flex items-start justify-between gap-2">
           <p className="text-[11px] font-semibold text-caa-navy uppercase tracking-wide">Step {index + 1} of {steps.length}</p>
-          <button onClick={onSkip} aria-label="Close tour" className="text-caa-muted hover:text-caa-body -mt-1 -mr-1 p-1">
+          <button onClick={onSkip} aria-label="Close" className="text-caa-muted hover:text-caa-body -mt-1 -mr-1 p-1">
             <X className="h-4 w-4" />
           </button>
         </div>
         <h3 className="font-bold text-sm text-caa-body mt-1.5">{step.title}</h3>
         <p className="text-xs text-caa-muted mt-1.5 leading-relaxed">{step.body}</p>
         <div className="flex items-center justify-between mt-4">
-          <button onClick={onSkip} className="text-[11px] text-caa-muted hover:text-caa-body">Skip tour</button>
+          <button onClick={onSkip} className="text-[11px] text-caa-muted hover:text-caa-body">{skipLabel}</button>
           <div className="flex gap-2">
             {index > 0 && (
               <button onClick={() => setIndex((i) => i - 1)} className="px-3 py-1.5 text-xs font-medium border border-caa-border rounded-md text-caa-body hover:bg-caa-surface">
